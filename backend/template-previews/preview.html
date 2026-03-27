@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Template Engine Preview</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #e8e8e8; padding: 32px 16px; }
+    .wrapper { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+    .card { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+    .card-header { padding: 12px 20px; background: #1a1a1a; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .card-header .name { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #aaa; }
+    .card-header .chars { font-size: 11px; color: #666; }
+    .card-body { padding: 0; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Template 1 — minimal_clean</span>
+      <span class="chars">1525 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;padding:20px;background:#fff;color:#222">
+  <p style="margin:0 0 4px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#999">SoundPro</p>
+  <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#111;line-height:1.3">Premium Wireless Noise Cancelling Headphones</h2>
+  <ul style="margin:8px 0 0 0;padding-left:20px;color:#444;font-size:14px;line-height:1.7">
+        <li>Active noise cancellation blocks up to 95% of ambient sound</li>
+        <li>40-hour battery life with quick charge (10 min = 3 hours)</li>
+        <li>Ultra-soft memory foam ear cushions for all-day comfort</li>
+        <li>Foldable design with premium carrying case included</li>
+        <li>Compatible with all Bluetooth 5.0 devices</li>
+       </ul>
+  <table style="margin-top:16px;border-collapse:collapse;width:100%"><tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">🚚 Shipping</td><td style="font-size:13px;color:#444">Fast &amp; Free Shipping — Delivered in 2–4 business days</td></tr>
+<tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">🔄 Returns</td><td style="font-size:13px;color:#444">30-day hassle-free returns accepted</td></tr>
+<tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">📝 Note</td><td style="font-size:13px;color:#444">Ships in original sealed packaging. Condition: New.</td></tr></table>
+</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Template 2 — modern_sales</span>
+      <span class="chars">1833 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;padding:0;background:#fff;color:#111">
+  <div style="padding:20px 20px 0">
+    <span style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#0064d2">SoundPro</span>
+    <h2 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#111;line-height:1.3">Premium Wireless Noise Cancelling Headphones</h2>
+  </div>
+  <div style="padding:0 20px"><div style="margin:16px 0;padding:16px;background:#f8f9fa;border-radius:6px">
+       <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#0064d2">Key Features</p>
+       <ul style="margin:0;padding-left:18px;color:#333;font-size:14px;line-height:1.8">
+         <li>Active noise cancellation blocks up to 95% of ambient sound</li>
+         <li>40-hour battery life with quick charge (10 min = 3 hours)</li>
+         <li>Ultra-soft memory foam ear cushions for all-day comfort</li>
+         <li>Foldable design with premium carrying case included</li>
+         <li>Compatible with all Bluetooth 5.0 devices</li>
+       </ul>
+     </div></div>
+  <div style="padding:0 20px 16px"><span style="display:inline-block;margin:4px 6px 4px 0;padding:5px 12px;background:#e8f4fd;color:#0064d2;border-radius:20px;font-size:12px;font-weight:600">Fast &amp; Free Shipping — Delivered in 2–4 business days</span><span style="display:inline-block;margin:4px 6px 4px 0;padding:5px 12px;background:#e8f7ee;color:#006e37;border-radius:20px;font-size:12px;font-weight:600">30-day hassle-free returns accepted</span></div>
+  <div style="margin:0 20px 20px;padding:12px 16px;background:#fff8e7;border-left:3px solid #f5a623;font-size:13px;color:#555">Ships in original sealed packaging. Condition: New.</div>
+</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Template 3 — premium_brand</span>
+      <span class="chars">2926 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;background:#fff;color:#111">
+  <div style="padding:24px 24px 16px;border-bottom:2px solid #111">
+    <p style="margin:0 0 6px;font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#888">SoundPro</p>
+    <h2 style="margin:0;font-size:22px;font-weight:700;color:#111;line-height:1.25;letter-spacing:-0.3px">Premium Wireless Noise Cancelling Headphones</h2>
+  </div>
+  <div style="padding:8px 24px 16px"><div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0">
+       <span style="color:#333;font-size:18px;flex-shrink:0;line-height:1.2">◆</span>
+       <span style="font-size:14px;color:#333;line-height:1.5">Active noise cancellation blocks up to 95% of ambient sound</span>
+     </div>
+<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0">
+       <span style="color:#333;font-size:18px;flex-shrink:0;line-height:1.2">◆</span>
+       <span style="font-size:14px;color:#333;line-height:1.5">40-hour battery life with quick charge (10 min = 3 hours)</span>
+     </div>
+<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0">
+       <span style="color:#333;font-size:18px;flex-shrink:0;line-height:1.2">◆</span>
+       <span style="font-size:14px;color:#333;line-height:1.5">Ultra-soft memory foam ear cushions for all-day comfort</span>
+     </div>
+<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0">
+       <span style="color:#333;font-size:18px;flex-shrink:0;line-height:1.2">◆</span>
+       <span style="font-size:14px;color:#333;line-height:1.5">Foldable design with premium carrying case included</span>
+     </div>
+<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0">
+       <span style="color:#333;font-size:18px;flex-shrink:0;line-height:1.2">◆</span>
+       <span style="font-size:14px;color:#333;line-height:1.5">Compatible with all Bluetooth 5.0 devices</span>
+     </div></div>
+  <div style="padding:0 24px 24px"><div style="padding:10px 0;border-bottom:1px solid #eee"><span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#999">Shipping</span><p style="margin:4px 0 0;font-size:13px;color:#444">Fast &amp; Free Shipping — Delivered in 2–4 business days</p></div><div style="padding:10px 0;border-bottom:1px solid #eee"><span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#999">Returns</span><p style="margin:4px 0 0;font-size:13px;color:#444">30-day hassle-free returns accepted</p></div><div style="padding:10px 0"><span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#999">Seller Note</span><p style="margin:4px 0 0;font-size:13px;color:#444">Ships in original sealed packaging. Condition: New.</p></div></div>
+</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Template 4 — minimal_pro</span>
+      <span class="chars">1951 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;padding:20px;background:#fff;color:#111">
+  <div style="margin-bottom:16px">
+    <span style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#0070ba;margin-right:8px">SoundPro</span>
+    <h2 style="display:inline;font-size:17px;font-weight:600;color:#111;line-height:1.4">Premium Wireless Noise Cancelling Headphones</h2>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0">
+        <div style="padding:10px 12px;background:#f5f5f5;border-radius:4px;font-size:13px;color:#333;line-height:1.4">Active noise cancellation blocks up to 95% of ambient sound</div>
+        <div style="padding:10px 12px;background:#f5f5f5;border-radius:4px;font-size:13px;color:#333;line-height:1.4">40-hour battery life with quick charge (10 min = 3 hours)</div>
+        <div style="padding:10px 12px;background:#f5f5f5;border-radius:4px;font-size:13px;color:#333;line-height:1.4">Ultra-soft memory foam ear cushions for all-day comfort</div>
+        <div style="padding:10px 12px;background:#f5f5f5;border-radius:4px;font-size:13px;color:#333;line-height:1.4">Foldable design with premium carrying case included</div>
+        <div style="padding:10px 12px;background:#f5f5f5;border-radius:4px;font-size:13px;color:#333;line-height:1.4">Compatible with all Bluetooth 5.0 devices</div>
+       </div>
+  <p style="margin:12px 0 0;padding:10px 14px;background:#f0f7ff;border-radius:4px;font-size:13px;color:#555;line-height:1.5">Ships in original sealed packaging. Condition: New.</p>
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee"><span style="font-size:12px;color:#666;margin-right:16px">✓ Fast &amp; Free Shipping — Delivered in 2–4 business days</span><span style="font-size:12px;color:#666;margin-right:16px">✓ 30-day hassle-free returns accepted</span></div>
+</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Artifact Test — modern_sales (dirty input)</span>
+      <span class="chars">✓ clean · 1586 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;padding:0;background:#fff;color:#111">
+  <div style="padding:20px 20px 0">
+    <span style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#0064d2">SoundPro ()</span>
+    <h2 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#111;line-height:1.3">Best Headphones — as seen on .com</h2>
+  </div>
+  <div style="padding:0 20px"><div style="margin:16px 0;padding:16px;background:#f8f9fa;border-radius:6px">
+       <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#0064d2">Key Features</p>
+       <ul style="margin:0;padding-left:18px;color:#333;font-size:14px;line-height:1.8">
+         <li>Buy on .com/dp/</li>
+         <li>— ships in 2 days</li>
+         <li>Check our store for more deals</li>
+       </ul>
+     </div></div>
+  <div style="padding:0 20px 16px"><span style="display:inline-block;margin:4px 6px 4px 0;padding:5px 12px;background:#e8f4fd;color:#0064d2;border-radius:20px;font-size:12px;font-weight:600">Fast &amp; Free Shipping — Delivered in 2–4 business days</span><span style="display:inline-block;margin:4px 6px 4px 0;padding:5px 12px;background:#e8f7ee;color:#006e37;border-radius:20px;font-size:12px;font-weight:600">30-day hassle-free returns accepted</span></div>
+  <div style="margin:0 20px 20px;padding:12px 16px;background:#fff8e7;border-left:3px solid #f5a623;font-size:13px;color:#555">Ships in original sealed packaging. Condition: New.</div>
+</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="name">Fallback Test — premium_brand (minimal input)</span>
+      <span class="chars">358 chars</span>
+    </div>
+    <div class="card-body"><div style="font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;box-sizing:border-box;max-width:680px;background:#fff;color:#111">
+  <div style="padding:24px 24px 16px;border-bottom:2px solid #111">
+    
+    <h2 style="margin:0;font-size:22px;font-weight:700;color:#111;line-height:1.25;letter-spacing:-0.3px">Generic Product</h2>
+  </div>
+  
+  
+</div></div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,521 @@
+2026-03-15 18:49:52.677 +03 [11008] LOG:  starting PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit
+2026-03-15 18:49:52.681 +03 [11008] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-15 18:49:52.681 +03 [11008] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-15 18:49:52.768 +03 [15128] LOG:  database system was shut down at 2026-03-15 18:48:24 +03
+2026-03-15 18:49:52.775 +03 [11008] LOG:  database system is ready to accept connections
+2026-03-15 18:51:35.063 +03 [11508] ERROR:  type "global_asin_status" already exists
+2026-03-15 18:51:35.063 +03 [11508] STATEMENT:  CREATE TYPE global_asin_status AS ENUM (
+	'active',
+	'blacklisted',
+	'invalid',
+	'archived'
+	);
+2026-03-15 18:51:35.066 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.066 +03 [11508] STATEMENT:  CREATE TYPE pool_status AS ENUM (
+	'ready',
+	'processing',
+	'skipped',
+	'completed'
+	);
+2026-03-15 18:51:35.069 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.069 +03 [11508] STATEMENT:  CREATE TYPE pipeline_stage AS ENUM (
+	'imported',
+	'validated',
+	'scraped',
+	'ai_generated',
+	'scheduled',
+	'listing',
+	'listed',
+	'rejected'
+	);
+2026-03-15 18:51:35.072 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.072 +03 [11508] STATEMENT:  CREATE TYPE scrape_status AS ENUM (
+	'pending',
+	'success',
+	'failed'
+	);
+2026-03-15 18:51:35.074 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.074 +03 [11508] STATEMENT:  CREATE TYPE ai_status AS ENUM (
+	'pending',
+	'success',
+	'failed'
+	);
+2026-03-15 18:51:35.077 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.077 +03 [11508] STATEMENT:  CREATE TYPE listing_execution_status AS ENUM (
+	'pending',
+	'success',
+	'failed'
+	);
+2026-03-15 18:51:35.079 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.079 +03 [11508] STATEMENT:  CREATE TYPE catalog_current_status AS ENUM (
+	'live',
+	'ended',
+	'error',
+	'pending'
+	);
+2026-03-15 18:51:35.082 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.082 +03 [11508] STATEMENT:  CREATE TYPE listing_history_status AS ENUM (
+	'created',
+	'live',
+	'ended',
+	'failed'
+	);
+2026-03-15 18:51:35.084 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.084 +03 [11508] STATEMENT:  CREATE TYPE job_status AS ENUM (
+	'pending',
+	'running',
+	'completed',
+	'failed'
+	);
+2026-03-15 18:51:35.087 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.087 +03 [11508] STATEMENT:  CREATE TYPE scheduler_mode AS ENUM (
+	'fixed',
+	'random'
+	);
+2026-03-15 18:51:35.089 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.089 +03 [11508] STATEMENT:  CREATE TYPE lock_reason AS ENUM (
+	'listing',
+	'scraping',
+	'cooldown',
+	'manual'
+	);
+2026-03-15 18:51:35.091 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.091 +03 [11508] STATEMENT:  CREATE TYPE blacklist_match_type AS ENUM (
+	'exact',
+	'contains',
+	'regex'
+	);
+2026-03-15 18:51:35.094 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.094 +03 [11508] STATEMENT:  CREATE TYPE store_health AS ENUM (
+	'healthy',
+	'warning',
+	'restricted',
+	'suspended'
+	);
+2026-03-15 18:51:35.096 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.096 +03 [11508] STATEMENT:  CREATE TYPE sync_health AS ENUM (
+	'ok',
+	'lagging',
+	'failed'
+	);
+2026-03-15 18:51:35.098 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.098 +03 [11508] STATEMENT:  CREATE TABLE workspaces (
+	id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+	name TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.101 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.101 +03 [11508] STATEMENT:  CREATE TABLE stores (
+	id SERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	store_code TEXT NOT NULL,
+	marketplace TEXT DEFAULT 'ebay',
+	status TEXT DEFAULT 'active',
+	max_active_listings INTEGER DEFAULT 10000,
+	target_active_listings INTEGER DEFAULT 5000,
+	daily_listing_limit INTEGER DEFAULT 250,
+	health_status store_health DEFAULT 'healthy',
+	sync_health sync_health DEFAULT 'ok',
+	last_sync_at TIMESTAMP,
+	error_count INTEGER DEFAULT 0,
+	last_error TEXT,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE (workspace_id, store_code)
+	);
+2026-03-15 18:51:35.103 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.103 +03 [11508] STATEMENT:  CREATE INDEX idx_stores_workspace
+	ON stores(workspace_id);
+2026-03-15 18:51:35.105 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.105 +03 [11508] STATEMENT:  CREATE INDEX idx_stores_status
+	ON stores(workspace_id, status);
+2026-03-15 18:51:35.108 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.108 +03 [11508] STATEMENT:  CREATE TABLE asin_registry (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	asin TEXT NOT NULL,
+	brand TEXT,
+	title TEXT,
+	global_status global_asin_status DEFAULT 'active',
+	first_seen_at TIMESTAMP DEFAULT NOW(),
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(workspace_id, asin)
+	);
+2026-03-15 18:51:35.110 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.110 +03 [11508] STATEMENT:  CREATE INDEX idx_asin_registry_workspace_asin
+	ON asin_registry(workspace_id, asin);
+2026-03-15 18:51:35.113 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.113 +03 [11508] STATEMENT:  CREATE INDEX idx_asin_registry_status
+	ON asin_registry(workspace_id, global_status);
+2026-03-15 18:51:35.115 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.115 +03 [11508] STATEMENT:  CREATE TABLE import_batches (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	source_type TEXT,
+	source_name TEXT,
+	uploaded_by TEXT,
+	total_rows INTEGER,
+	valid_rows INTEGER,
+	ready_count INTEGER,
+	duplicate_pool_count INTEGER,
+	already_live_count INTEGER,
+	blacklist_count INTEGER,
+	cooldown_count INTEGER,
+	invalid_count INTEGER,
+	scrape_failed_count INTEGER,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.118 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.118 +03 [11508] STATEMENT:  CREATE INDEX idx_import_batches_workspace
+	ON import_batches(workspace_id, created_at DESC);
+2026-03-15 18:51:35.120 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.120 +03 [11508] STATEMENT:  CREATE TABLE scheduler_profiles (
+	id SERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	name TEXT,
+	mode scheduler_mode DEFAULT 'fixed',
+	fixed_interval_seconds INTEGER,
+	random_min_seconds INTEGER,
+	random_max_seconds INTEGER,
+	is_active BOOLEAN DEFAULT TRUE,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.123 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.123 +03 [11508] STATEMENT:  CREATE INDEX idx_scheduler_profiles_workspace_active
+	ON scheduler_profiles(workspace_id, is_active);
+2026-03-15 18:51:35.125 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.125 +03 [11508] STATEMENT:  CREATE TABLE asin_pool (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE CASCADE,
+	import_batch_id BIGINT REFERENCES import_batches(id) ON DELETE SET NULL,
+	status pool_status DEFAULT 'ready',
+	assigned_store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+	scheduler_profile_id INTEGER REFERENCES scheduler_profiles(id) ON DELETE SET NULL,
+	priority INTEGER DEFAULT 0,
+	skip_reason TEXT,
+	scrape_status scrape_status DEFAULT 'pending',
+	ai_status ai_status DEFAULT 'pending',
+	listing_status listing_execution_status DEFAULT 'pending',
+	pipeline_stage pipeline_stage DEFAULT 'imported',
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.128 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.128 +03 [11508] STATEMENT:  CREATE INDEX idx_pool_workspace_stage_priority
+	ON asin_pool(workspace_id, pipeline_stage, priority DESC, id ASC);
+2026-03-15 18:51:35.130 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.130 +03 [11508] STATEMENT:  CREATE INDEX idx_pool_workspace_status
+	ON asin_pool(workspace_id, status);
+2026-03-15 18:51:35.133 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.133 +03 [11508] STATEMENT:  CREATE INDEX idx_pool_asin_registry
+	ON asin_pool(asin_registry_id);
+2026-03-15 18:51:35.135 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.135 +03 [11508] STATEMENT:  CREATE INDEX idx_pool_assigned_store
+	ON asin_pool(assigned_store_id);
+2026-03-15 18:51:35.138 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.138 +03 [11508] STATEMENT:  CREATE TABLE store_catalog_state (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE CASCADE,
+	internal_sku TEXT NOT NULL,
+	ebay_item_id TEXT,
+	ebay_offer_id TEXT,
+	current_status catalog_current_status DEFAULT 'pending',
+	listed_at TIMESTAMP,
+	last_seen_live_at TIMESTAMP,
+	last_seen_ended_at TIMESTAMP,
+	last_sync_at TIMESTAMP,
+	source_of_truth TEXT DEFAULT 'ebay_sync',
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(store_id, asin_registry_id),
+	UNIQUE(workspace_id, internal_sku)
+	);
+2026-03-15 18:51:35.140 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.140 +03 [11508] STATEMENT:  CREATE INDEX idx_catalog_workspace_store_status
+	ON store_catalog_state(workspace_id, store_id, current_status);
+2026-03-15 18:51:35.142 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.142 +03 [11508] STATEMENT:  CREATE INDEX idx_catalog_asin_status
+	ON store_catalog_state(asin_registry_id, current_status);
+2026-03-15 18:51:35.145 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.145 +03 [11508] STATEMENT:  CREATE INDEX idx_catalog_last_sync
+	ON store_catalog_state(workspace_id, last_sync_at DESC);
+2026-03-15 18:51:35.147 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.147 +03 [11508] STATEMENT:  CREATE TABLE listing_history (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE SET NULL,
+	internal_sku TEXT,
+	ebay_item_id TEXT,
+	ebay_offer_id TEXT,
+	amazon_url_snapshot TEXT,
+	title_snapshot TEXT,
+	price_snapshot NUMERIC,
+	status listing_history_status,
+	listed_at TIMESTAMP,
+	ended_at TIMESTAMP,
+	listing_job_ref BIGINT,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.150 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.150 +03 [11508] STATEMENT:  CREATE INDEX idx_listing_history_workspace_store
+	ON listing_history(workspace_id, store_id, created_at DESC);
+2026-03-15 18:51:35.152 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.152 +03 [11508] STATEMENT:  CREATE INDEX idx_listing_history_asin
+	ON listing_history(asin_registry_id, created_at DESC);
+2026-03-15 18:51:35.155 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.155 +03 [11508] STATEMENT:  CREATE INDEX idx_listing_history_job_ref
+	ON listing_history(listing_job_ref);
+2026-03-15 18:51:35.157 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.157 +03 [11508] STATEMENT:  CREATE TABLE deletion_history (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE SET NULL,
+	internal_sku TEXT,
+	deletion_reason TEXT,
+	cooldown_until TIMESTAMP,
+	deleted_by TEXT,
+	notes TEXT,
+	deleted_at TIMESTAMP DEFAULT NOW(),
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.159 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.159 +03 [11508] STATEMENT:  CREATE INDEX idx_deletion_history_asin_deleted
+	ON deletion_history(asin_registry_id, deleted_at DESC);
+2026-03-15 18:51:35.162 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.162 +03 [11508] STATEMENT:  CREATE INDEX idx_deletion_history_cooldown
+	ON deletion_history(workspace_id, cooldown_until);
+2026-03-15 18:51:35.164 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.164 +03 [11508] STATEMENT:  CREATE TABLE jobs (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	job_type TEXT,
+	payload_json JSONB,
+	related_entity_type TEXT,
+	related_entity_id BIGINT,
+	status job_status DEFAULT 'pending',
+	error_message TEXT,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.167 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.167 +03 [11508] STATEMENT:  CREATE INDEX idx_jobs_workspace_status_created
+	ON jobs(workspace_id, status, created_at DESC);
+2026-03-15 18:51:35.169 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.169 +03 [11508] STATEMENT:  CREATE INDEX idx_jobs_related_entity
+	ON jobs(workspace_id, related_entity_type, related_entity_id);
+2026-03-15 18:51:35.172 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.172 +03 [11508] STATEMENT:  CREATE TABLE brand_blacklist (
+	id SERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	brand_name TEXT,
+	normalized_brand_name TEXT,
+	is_active BOOLEAN DEFAULT TRUE,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(workspace_id, normalized_brand_name)
+	);
+2026-03-15 18:51:35.174 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.174 +03 [11508] STATEMENT:  CREATE INDEX idx_brand_blacklist_workspace_active
+	ON brand_blacklist(workspace_id, is_active);
+2026-03-15 18:51:35.177 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.177 +03 [11508] STATEMENT:  CREATE TABLE keyword_blacklist (
+	id SERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	keyword TEXT,
+	match_type blacklist_match_type DEFAULT 'contains',
+	is_active BOOLEAN DEFAULT TRUE,
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(workspace_id, keyword, match_type)
+	);
+2026-03-15 18:51:35.179 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.179 +03 [11508] STATEMENT:  CREATE INDEX idx_keyword_blacklist_workspace_active
+	ON keyword_blacklist(workspace_id, is_active);
+2026-03-15 18:51:35.182 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.182 +03 [11508] STATEMENT:  CREATE TABLE asin_locks (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE CASCADE,
+	locked_by_store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+	lock_reason lock_reason,
+	locked_at TIMESTAMP DEFAULT NOW(),
+	expires_at TIMESTAMP,
+	created_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(workspace_id, asin_registry_id)
+	);
+2026-03-15 18:51:35.184 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.184 +03 [11508] STATEMENT:  CREATE INDEX idx_asin_locks_workspace_expiry
+	ON asin_locks(workspace_id, expires_at);
+2026-03-15 18:51:35.187 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.187 +03 [11508] STATEMENT:  CREATE TABLE amazon_product_cache (
+	asin_registry_id BIGINT PRIMARY KEY REFERENCES asin_registry(id) ON DELETE CASCADE,
+	title TEXT,
+	brand TEXT,
+	price NUMERIC,
+	images JSONB,
+	attributes JSONB,
+	updated_at TIMESTAMP DEFAULT NOW()
+	);
+2026-03-15 18:51:35.189 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.189 +03 [11508] STATEMENT:  CREATE TABLE ai_listing_cache (
+	id BIGSERIAL PRIMARY KEY,
+	workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+	asin_registry_id BIGINT REFERENCES asin_registry(id) ON DELETE CASCADE,
+	title TEXT,
+	description TEXT,
+	bullets JSONB,
+	generated_at TIMESTAMP DEFAULT NOW(),
+	created_at TIMESTAMP DEFAULT NOW(),
+	updated_at TIMESTAMP DEFAULT NOW(),
+	UNIQUE(workspace_id, asin_registry_id)
+	);
+2026-03-15 18:51:35.192 +03 [11508] ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-03-15 18:51:35.192 +03 [11508] STATEMENT:  CREATE INDEX idx_ai_listing_cache_workspace_asin
+	ON ai_listing_cache(workspace_id, asin_registry_id);
+2026-03-15 18:52:02.375 +03 [7840] LOG:  checkpoint starting: immediate force wait
+2026-03-15 18:52:02.444 +03 [7840] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 3 SLRU buffers; 1 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.012 s, total=0.070 s; sync files=5, longest=0.003 s, average=0.003 s; distance=5402 kB, estimate=5402 kB; lsn=0/1D37E28, redo lsn=0/1D37DD0
+2026-03-15 18:52:21.916 +03 [17816] ERROR:  insert or update on table "stores" violates foreign key constraint "stores_workspace_id_fkey"
+2026-03-15 18:52:21.916 +03 [17816] DETAIL:  Key (workspace_id)=(00000000-0000-0000-0000-000000000001) is not present in table "workspaces".
+2026-03-15 18:52:21.916 +03 [17816] STATEMENT:  
+	    INSERT INTO stores (
+	      workspace_id,
+	      name,
+	      store_code,
+	      marketplace,
+	      status,
+	      max_active_listings,
+	      target_active_listings,
+	      daily_listing_limit
+	    )
+	    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	    RETURNING *
+	  
+2026-03-15 18:53:15.463 +03 [7544] ERROR:  relation "store_settings" does not exist at character 20
+2026-03-15 18:53:15.463 +03 [7544] STATEMENT:  SELECT *
+	     FROM store_settings
+	     WHERE workspace_id = $1
+	       AND store_id     = $2
+	     LIMIT 1
+2026-03-15 18:53:15.474 +03 [7544] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-15 18:53:54.831 +03 [3004] ERROR:  insert or update on table "store_settings" violates foreign key constraint "store_settings_store_id_fkey"
+2026-03-15 18:53:54.831 +03 [3004] DETAIL:  Key (store_id)=(1) is not present in table "stores".
+2026-03-15 18:53:54.831 +03 [3004] STATEMENT:  INSERT INTO store_settings (
+	       workspace_id,
+	       store_id,
+	       profit_margin_percent,
+	       tax_estimate_percent,
+	       ebay_fee_percent,
+	       default_quantity,
+	       template_id,
+	       merchant_location_key,
+	       payment_policy_id,
+	       return_policy_id,
+	       fulfillment_policy_id,
+	       interval_minutes,
+	       enabled,
+	       created_at,
+	       updated_at
+	     )
+	     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
+	     RETURNING *
+2026-03-15 18:53:54.838 +03 [3004] LOG:  could not receive data from client: An existing connection was forcibly closed by the remote host.
+	
+2026-03-15 18:57:02.453 +03 [7840] LOG:  checkpoint starting: time
+2026-03-15 18:59:07.051 +03 [7840] LOG:  checkpoint complete: wrote 1143 buffers (7.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 1 recycled; write=123.662 s, sync=0.914 s, total=124.599 s; sync files=422, longest=0.008 s, average=0.003 s; distance=5819 kB, estimate=5819 kB; lsn=0/22E6DC0, redo lsn=0/22E6D30
+2026-03-15 19:50:24.881 +03 [11008] LOG:  could not reserve shared memory region (addr=0000014612D30000) for child 0000000000001308: error code 487
+2026-03-15 19:57:02.191 +03 [7840] LOG:  checkpoint starting: time
+2026-03-15 19:57:02.322 +03 [7840] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.110 s, sync=0.004 s, total=0.131 s; sync files=1, longest=0.004 s, average=0.004 s; distance=3 kB, estimate=5238 kB; lsn=0/22E7B70, redo lsn=0/22E7B18
+2026-03-15 20:02:00.530 +03 [11008] LOG:  background worker "logical replication launcher" (PID 10744) was terminated by exception 0xC000013A
+2026-03-15 20:02:00.530 +03 [11008] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-15 20:02:00.530 +03 [11008] LOG:  terminating any other active server processes
+2026-03-15 20:02:00.533 +03 [11008] LOG:  received fast shutdown request
+^C2026-03-15 23:52:36.312 +03 [7832] LOG:  starting PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit
+2026-03-15 23:52:36.314 +03 [7832] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-15 23:52:36.314 +03 [7832] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-15 23:52:36.411 +03 [9832] LOG:  database system was interrupted; last known up at 2026-03-15 19:57:02 +03
+2026-03-15 23:52:40.627 +03 [9832] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-15 23:52:40.632 +03 [9832] LOG:  redo starts at 0/22E7B18
+2026-03-15 23:52:40.632 +03 [9832] LOG:  invalid record length at 0/22E7C20: expected at least 24, got 0
+2026-03-15 23:52:40.632 +03 [9832] LOG:  redo done at 0/22E7BE8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-15 23:52:40.655 +03 [4416] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-15 23:52:40.682 +03 [4416] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.006 s, total=0.047 s; sync files=2, longest=0.003 s, average=0.003 s; distance=0 kB, estimate=0 kB; lsn=0/22E7C20, redo lsn=0/22E7C20
+2026-03-15 23:52:40.704 +03 [7832] LOG:  database system is ready to accept connections
+2026-03-15 23:57:40.687 +03 [4416] LOG:  checkpoint starting: time
+2026-03-15 23:57:42.473 +03 [4416] LOG:  checkpoint complete: wrote 16 buffers (0.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=1.730 s, sync=0.041 s, total=1.787 s; sync files=17, longest=0.004 s, average=0.003 s; distance=27 kB, estimate=27 kB; lsn=0/22EE940, redo lsn=0/22EE8E8
+2026-03-16 00:02:40.469 +03 [4416] LOG:  checkpoint starting: time
+2026-03-16 00:02:42.624 +03 [4416] LOG:  checkpoint complete: wrote 20 buffers (0.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=2.109 s, sync=0.030 s, total=2.156 s; sync files=13, longest=0.003 s, average=0.003 s; distance=100 kB, estimate=100 kB; lsn=0/2307CF8, redo lsn=0/2307CA0
+2026-03-16 00:07:40.626 +03 [4416] LOG:  checkpoint starting: time
+2026-03-16 00:07:43.256 +03 [4416] LOG:  checkpoint complete: wrote 24 buffers (0.1%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=2.555 s, sync=0.056 s, total=2.630 s; sync files=24, longest=0.004 s, average=0.003 s; distance=98 kB, estimate=100 kB; lsn=0/23207D0, redo lsn=0/2320778
+2026-03-16 00:32:40.329 +03 [4416] LOG:  checkpoint starting: time
+2026-03-16 00:32:40.452 +03 [4416] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.105 s, sync=0.002 s, total=0.124 s; sync files=1, longest=0.002 s, average=0.002 s; distance=5 kB, estimate=91 kB; lsn=0/2321F80, redo lsn=0/2321F28
+2026-03-16 00:36:42.291 +03 [7832] LOG:  could not reserve shared memory region (addr=000001F499FF0000) for child 00000000000015E4: error code 487
+2026-03-16 00:56:24.575 +03 [7832] LOG:  received fast shutdown request
+2026-03-16 00:56:24.576 +03 [4416] LOG:  shutting down
+2026-03-16 00:56:24.580 +03 [4416] LOG:  checkpoint starting: shutdown immediate
+2026-03-16 00:56:24.582 +03 [7832] LOG:  aborting any active transactions
+2026-03-16 00:56:24.597 +03 [804] ERROR:  canceling statement due to user request
+2026-03-16 00:56:24.606 +03 [7832] LOG:  background worker "logical replication launcher" (PID 804) exited with exit code 1
+2026-03-16 00:56:24.700 +03 [4416] LOG:  checkpoint complete: wrote 50 buffers (0.3%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.013 s, sync=0.091 s, total=0.125 s; sync files=41, longest=0.003 s, average=0.003 s; distance=243 kB, estimate=243 kB; lsn=0/235EE48, redo lsn=0/235EE48
+2026-03-16 00:56:24.724 +03 [7832] LOG:  database system is shut down
+2026-03-16 00:59:39.396 +03 [17764] LOG:  starting PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit
+2026-03-16 00:59:39.399 +03 [17764] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-16 00:59:39.399 +03 [17764] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-16 00:59:39.482 +03 [10952] LOG:  database system was shut down at 2026-03-16 00:56:24 +03
+2026-03-16 00:59:39.492 +03 [17764] LOG:  database system is ready to accept connections
+2026-03-16 01:04:39.485 +03 [11128] LOG:  checkpoint starting: time
+2026-03-16 01:04:40.285 +03 [11128] LOG:  checkpoint complete: wrote 6 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.654 s, sync=0.086 s, total=0.801 s; sync files=8, longest=0.019 s, average=0.011 s; distance=2 kB, estimate=2 kB; lsn=0/235F9B8, redo lsn=0/235F960
+2026-03-16 01:09:39.288 +03 [11128] LOG:  checkpoint starting: time
+2026-03-16 01:09:39.955 +03 [11128] LOG:  checkpoint complete: wrote 6 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.630 s, sync=0.017 s, total=0.668 s; sync files=7, longest=0.003 s, average=0.003 s; distance=3 kB, estimate=3 kB; lsn=0/2360730, redo lsn=0/23606D8
+2026-03-16 01:14:39.957 +03 [11128] LOG:  checkpoint starting: time
+2026-03-16 01:14:40.662 +03 [11128] LOG:  checkpoint complete: wrote 6 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.674 s, sync=0.016 s, total=0.706 s; sync files=7, longest=0.003 s, average=0.003 s; distance=3 kB, estimate=3 kB; lsn=0/2361660, redo lsn=0/23615D0
+2026-03-16 01:58:08.357 +03 [17764] LOG:  background worker "logical replication launcher" (PID 6524) was terminated by exception 0xC000013A
+2026-03-16 01:58:08.357 +03 [17764] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-16 01:58:08.357 +03 [17764] LOG:  terminating any other active server processes
+2026-03-16 01:58:08.360 +03 [17764] LOG:  received fast shutdown request
+^C2026-03-16 02:36:02.956 +03 [16080] LOG:  starting PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit
+2026-03-16 02:36:02.959 +03 [16080] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-16 02:36:02.959 +03 [16080] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-16 02:36:03.035 +03 [19024] LOG:  database system was interrupted; last known up at 2026-03-16 01:14:40 +03
+2026-03-16 02:36:05.763 +03 [19024] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-16 02:36:05.768 +03 [19024] LOG:  redo starts at 0/23615D0
+2026-03-16 02:36:05.768 +03 [19024] LOG:  invalid record length at 0/2361710: expected at least 24, got 0
+2026-03-16 02:36:05.768 +03 [19024] LOG:  redo done at 0/23616D8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-16 02:36:05.784 +03 [18940] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-16 02:36:05.825 +03 [18940] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.006 s, total=0.055 s; sync files=2, longest=0.003 s, average=0.003 s; distance=0 kB, estimate=0 kB; lsn=0/2361710, redo lsn=0/2361710
+2026-03-16 02:36:05.835 +03 [16080] LOG:  database system is ready to accept connections
+2026-03-16 02:41:05.849 +03 [18940] LOG:  checkpoint starting: time
+2026-03-16 02:41:06.078 +03 [18940] LOG:  checkpoint complete: wrote 2 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.205 s, sync=0.008 s, total=0.230 s; sync files=3, longest=0.003 s, average=0.003 s; distance=2 kB, estimate=2 kB; lsn=0/23621C8, redo lsn=0/2362170
+2026-03-16 02:41:37.867 +03 [16080] LOG:  background worker "logical replication launcher" (PID 9488) was terminated by exception 0xC000013A
+2026-03-16 02:41:37.867 +03 [16080] HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+2026-03-16 02:41:37.867 +03 [16080] LOG:  terminating any other active server processes
+2026-03-16 02:41:37.872 +03 [16080] LOG:  received fast shutdown request
+^C2026-03-16 02:43:39.942 +03 [17952] LOG:  starting PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit
+2026-03-16 02:43:39.945 +03 [17952] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-16 02:43:39.945 +03 [17952] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-16 02:43:40.026 +03 [13048] LOG:  database system was interrupted; last known up at 2026-03-16 02:41:06 +03
+2026-03-16 02:43:42.689 +03 [13048] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-03-16 02:43:42.697 +03 [13048] LOG:  redo starts at 0/2362170
+2026-03-16 02:43:42.697 +03 [13048] LOG:  invalid record length at 0/2362278: expected at least 24, got 0
+2026-03-16 02:43:42.697 +03 [13048] LOG:  redo done at 0/2362240 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-03-16 02:43:42.720 +03 [6708] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-03-16 02:43:42.760 +03 [6708] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.005 s, total=0.061 s; sync files=2, longest=0.003 s, average=0.003 s; distance=0 kB, estimate=0 kB; lsn=0/2362278, redo lsn=0/2362278
+2026-03-16 02:43:42.781 +03 [17952] LOG:  database system is ready to accept connections
+2026-03-16 02:48:42.780 +03 [6708] LOG:  checkpoint starting: time
+2026-03-16 02:48:42.873 +03 [17952] LOG:  could not open file "postmaster.pid": No such file or directory
+2026-03-16 02:48:42.873 +03 [17952] LOG:  performing immediate shutdown because data directory lock file is invalid
+2026-03-16 02:48:42.873 +03 [17952] LOG:  received immediate shutdown request
+2026-03-16 02:48:42.874 +03 [17952] LOG:  could not open file "postmaster.pid": No such file or directory
+2026-03-16 02:48:42.890 +03 [17952] LOG:  database system is shut down

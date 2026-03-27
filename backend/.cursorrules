@@ -1,0 +1,231 @@
+# DropPanel — Amazon→eBay Dropshipping SaaS
+# Cursor için proje bağlamı ve kurallar
+
+## PROJE TANIMI
+DropPanel, Amazon ürünlerini eBay'de otomatik listeleyen bir dropshipping SaaS platformudur.
+Tek workspace, çok mağaza (S1, S2, S3, S4) desteği vardır.
+
+## TEKNOLOJİ STACK
+- Backend: Node.js + TypeScript (strict mode) + Express
+- Panel: Next.js 14 + TailwindCSS
+- DB: PostgreSQL 18
+- Queue: BullMQ + Redis (planned)
+- eBay API: Inventory API, Account API, Fulfillment API
+- AI: Claude API (Anthropic)
+
+## KRİTİK KURALLAR
+
+### TypeScript
+- Strict mode zorunlu
+- `any` tip kullanma
+- Her fonksiyon için return type yaz
+- Tam dosya yaz, parça kod verme
+
+### Dosya Yapısı
+```
+backend/
+  modules/
+    admin/           → adminRoutes.ts, adminService.ts, adminTypes.ts
+    asinImport/      → asinImportService.ts, asinImportTypes.ts
+    dispatch/        → dispatchService.ts, dispatchTypes.ts
+    ebay/            → ebayApiClient.ts, ebayApiTypes.ts, ebayInventoryService.ts, ebayPayloadService.ts
+    ebayOAuth/       → ebayOAuthService.ts, ebayOAuthTypes.ts
+    monitor/         → monitorService.ts, monitorTypes.ts
+    monitorActions/  → monitorActionsService.ts, monitorActionsTypes.ts
+    publishQueue/    → publishQueueService.ts, publishQueueTypes.ts, publishQueueRepository.ts
+    publishGuard/    → publishGuardService.ts, publishGuardTypes.ts
+    pricing/         → pricingService.ts
+    storeSettings/   → storeSettingsService.ts, storeSettingsRepository.ts, storeSettingsTypes.ts
+    stores/          → storeRepository.ts
+    pool/            → poolRepository.ts
+    registry/        → registryRepository.ts
+    scheduler/       → schedulerService.ts
+    worker/          → workerService.ts
+    runtime/         → runtimeService.ts
+    templates/       → templateService.ts, templateTypes.ts
+    http/            → httpServer.ts, httpTypes.ts
+    db/              → client.ts
+  server.ts
+  start-worker-loop.ts
+panel/
+  src/
+    app/             → Next.js pages (import, dashboard, queue, history, stores, monitor, pool, dispatch)
+    components/      → layout/Sidebar.tsx, layout/Topbar.tsx, ui/
+    lib/             → api.ts
+```
+
+### SKU FORMAT
+```
+YENİ format (alphanumeric): DP{ASIN}{STORESCODE}
+Örnek: DPB071251380S1
+
+ESKİ format (legacy): DP-{ASIN}-{STORESCODE}
+Örnek: DP-B071251380-S1
+
+eBay SKU'da tire (-) KULLANMA — sadece alphanumeric
+```
+
+### SIMULATION MODE
+```typescript
+// .env
+EBAY_SIMULATION=true   // fake eBay, gerçek DB
+EBAY_SIMULATION=false  // gerçek eBay API
+
+// Kod içinde kontrol
+const simulation = (process.env.EBAY_SIMULATION ?? "true") !== "false"
+
+// monitorService içinde
+const simMode = ebayConfig.simulationMode !== false
+```
+
+### DATABASE
+```
+Workspace ID: 00000000-0000-0000-0000-000000000001
+Stores: S1(id=2), S2(id=3), S3(id=4), S4(id=5)
+
+Tablolar:
+- workspaces
+- stores
+- store_settings
+- asin_registry
+- asin_pool
+- amazon_product_cache
+- ai_listing_cache
+- listing_history
+- ebay_accounts
+```
+
+### PIPELINE AKIŞI
+```
+ASIN Import
+  → asin_registry + asin_pool (validated, pending)
+  → amazon_product_cache (scraper/extension)
+  → ai_listing_cache (Claude AI)
+  → eBay payload (pricing + template)
+  → Publish Guard (score check)
+  → eBay Inventory API
+  → listing_history
+```
+
+### FİYATLANDIRMA
+```
+P = C × (1 + margin) / (1 - fee - tax)
+
+Rule engine:
+< $15    → %35 margin
+$15-40   → %25 margin
+$40-100  → %18 margin
+$100+    → %15 margin
+```
+
+### BACKEND ENDPOINTLERİ
+```
+GET  /admin/summary
+GET  /admin/queue
+GET  /admin/history
+GET  /admin/stores
+GET  /admin/pool
+POST /admin/pool/dispatch-selected
+POST /admin/listing/run
+GET  /admin/ebay/connect-url
+GET  /admin/ebay/callback
+GET  /admin/ebay/account-status
+GET  /admin/ebay/accounts
+POST /admin/ebay/refresh
+GET  /admin/monitor/listings
+POST /admin/monitor/update-price
+POST /admin/monitor/update-stock
+POST /admin/monitor/blind
+POST /admin/asins/import
+POST /admin/dispatch
+POST /admin/publish/run
+```
+
+### .env DEĞİŞKENLERİ
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/droppanel
+WORKSPACE_ID=00000000-0000-0000-0000-000000000001
+PORT=4000
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+EBAY_CLIENT_ID=...
+EBAY_CLIENT_SECRET=...
+EBAY_REDIRECT_URI=https://kasen-unpent-sheryl.ngrok-free.dev/admin/ebay/callback
+EBAY_SIMULATION=true
+EBAY_SANDBOX=true
+EBAY_RUNAME=Adil_Korkmaz-AdilKork-Produc-vfokq
+```
+
+### PANEL API (lib/api.ts)
+```typescript
+// Base URL
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000"
+
+// apiFetch helper kullan
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T>
+```
+
+### YENİ MODÜL EKLERKEN
+1. types dosyası oluştur
+2. service dosyası oluştur
+3. adminRoutes.ts'e handler ekle
+4. httpServer.ts'e route ekle
+5. panel/src/lib/api.ts'e fonksiyon ekle
+6. Test dosyası yaz: test-{modül-adı}.ts
+
+### GIT KURALI
+Her çalışan özellik sonrası:
+```
+git add .
+git commit -m "v{n} - açıklama"
+```
+
+Dosya bozulursa:
+```
+git checkout -- modules/admin/adminRoutes.ts
+```
+
+## YAKLAŞAN MODÜLLER
+
+### productExtractor (Chrome Extension backend)
+```typescript
+// Extension'dan gelen JSON
+type AmazonProductData = {
+  asin:        string
+  title:       string
+  brand:       string
+  price:       number
+  currency:    string
+  images:      string[]
+  bullets:     string[]
+  description: string
+  specs:       Record<string, string>
+  rating:      number
+  reviews:     number
+  bsr:         number | null
+  category:    string
+  isPrime:     boolean
+  isFreeShipping: boolean
+}
+```
+
+### aiListing (Claude API)
+```typescript
+// Claude Haiku kullan (ucuz)
+// Model: claude-haiku-4-5-20251001
+// Input: AmazonProductData
+// Output: eBay listing (title + bullets + description)
+```
+
+### imageProcessor (Sharp)
+```typescript
+// Amazon image → watermark ekle → eBay image
+// Overlay: FREE SHIPPING / FAST DELIVERY / BEST SELLER
+// Konum: sol üst köşe
+```
+
+## NOTLAR
+- PostgreSQL başlatma: C:\Users\pc\Desktop\start-postgres.bat (çift tıkla)
+- Backend: npx ts-node server.ts
+- Panel: cd panel && npm run dev
+- ngrok: cd C:\Users\pc\Desktop && .\ngrok.exe http 4000
+- Test çalıştırma: npx ts-node test-{name}.ts

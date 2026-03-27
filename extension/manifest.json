@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "DropPanel",
+  "version": "1.0.0",
+  "description": "DropPanel Amazon scraper and worker",
+  "permissions": ["tabs", "storage", "scripting", "alarms", "activeTab"],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "http://localhost:4000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
