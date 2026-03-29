@@ -77,25 +77,54 @@
     const seen = new Set();
     const urls = [];
 
-    const addUrl = (src) => {
+    function addUrl(src) {
       if (!src || typeof src !== 'string') return;
-      src = src.trim();
-      if (!src.includes('images')) return;
-      // Dosya adını çıkar (parametre kısmını at)
-      const base = src.split('._')[0];
+      if (!src.includes('media-amazon.com/images/I/')) return;
+      if (src.includes('play-button') || src.includes('PKplay') || src.includes('.SS')) return;
+
+      // SL3000 formatına çevir
+      const upscaled = src.replace(/\._[A-Z0-9_,]+(?:_[A-Z0-9_,]+)*_\./, '._SL3000_.');
+
+      // Base: sadece görsel ID kısmı (parametre öncesi)
+      const base = upscaled.split('/').pop()?.split('.')[0] || upscaled;
       if (seen.has(base)) return;
       seen.add(base);
-      urls.push(src);
-    };
+      urls.push(upscaled);
+    }
 
-    const main = document.querySelector('#main-image');
-    if (main && main.src) addUrl(main.src);
+    // Script'lerden hiRes URL'lerini çek
+    try {
+      const scripts = document.querySelectorAll('script');
+      for (const s of scripts) {
+        const text = s.innerText || s.textContent || '';
+        if (!text.includes('colorImages')) continue;
 
-    const imgs = document.querySelectorAll('#imageBlock img, .imgTagWrapper img, #altImages img[src*="images"]');
-    for (const img of imgs) {
-      let src = img.src || img.getAttribute('data-old-hires') || '';
-      addUrl(src);
-      if (urls.length >= MAX_IMAGES) break;
+        // Önce hiRes URL'lerini dene
+        const hiResMatches = text.matchAll(/"hiRes"\s*:\s*"([^"]+)"/g);
+        for (const m of hiResMatches) {
+          addUrl(m[1]);
+        }
+
+        // hiRes bulunamazsa large URL'lerini kullan
+        if (urls.length === 0) {
+          const largeMatches = text.matchAll(/"large"\s*:\s*"([^"]+)"/g);
+          for (const m of largeMatches) {
+            addUrl(m[1]);
+          }
+        }
+
+        if (urls.length > 0) break;
+      }
+    } catch(e) {}
+
+    // Fallback: DOM'dan çek
+    if (urls.length === 0) {
+      const imgs = document.querySelectorAll('#imageBlock img, .imgTagWrapper img, #altImages img');
+      for (const img of imgs) {
+        const hires = img.getAttribute('data-old-hires') || img.src;
+        if (hires) addUrl(hires);
+        if (urls.length >= MAX_IMAGES) break;
+      }
     }
 
     return urls.slice(0, MAX_IMAGES);

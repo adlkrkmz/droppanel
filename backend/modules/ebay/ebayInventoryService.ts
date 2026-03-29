@@ -393,7 +393,8 @@ export async function runInventoryFlow(
       imageUrls = []
     }
 
-    const description = rewriteDescriptionImageUrls(payload.description, payload.images, imageUrls)
+    let description = rewriteDescriptionImageUrls(payload.description, payload.images, imageUrls)
+    description = description.replace("HERO_IMAGE_PLACEHOLDER", imageUrls[0] || "")
 
     await tryEnsureWarehouseLocation(client, payload.storeCode, storeRow)
 
@@ -420,52 +421,98 @@ export async function runInventoryFlow(
       )
     }
 
-    // Product Dimensions parse et ve Item Width/Height/Length olarak ekle
+    // Dimensions parse
     const dimSources = [
       payload.itemSpecifics?.["Product Dimensions"],
       payload.itemSpecifics?.["Item Dimensions D x W x H"],
+      payload.itemSpecifics?.["Item Dimensions W x H"],
+      payload.itemSpecifics?.["Item Dimensions L x W x H"],
+      payload.itemSpecifics?.["Item Dimensions L x W"],
       payload.itemSpecifics?.["Item Dimensions"],
       payload.itemSpecifics?.["Size"],
     ]
 
     for (const dims of dimSources) {
       if (!dims || typeof dims !== "string") continue
-      console.log("[InventoryFlow] dims trying:", dims)
+      const cleanDims = dims.replace(/\\"/g, "").replace(/"/g, "").replace(/'/g, "").trim()
+      console.log("[InventoryFlow] cleanDims:", cleanDims)
 
-      // Escape karakterlerini temizle
-      const cleanDims = dims.replace(/\\"/g, '"').replace(/"/g, "")
-
-      // "3.7D x 7.9W x 6.2H" formatı
-      const dwh = cleanDims.match(
-        /([0-9.]+)\s*D\s*[xX×]\s*([0-9.]+)\s*W\s*[xX×]\s*([0-9.]+)\s*H/i
-      )
+      // D x W x H
+      const dwh = cleanDims.match(/([0-9.]+)\s*D\s*[xX×]\s*([0-9.]+)\s*W\s*[xX×]\s*([0-9.]+)\s*H/i)
       if (dwh) {
-        console.log("[InventoryFlow] dims parsed DWH:", dwh[1], dwh[2], dwh[3])
+        console.log("[InventoryFlow] matched DWH:", dwh[1], dwh[2], dwh[3])
         if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = dwh[1] + " in"
         if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = dwh[2] + " in"
         if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = dwh[3] + " in"
         break
       }
 
-      // "7.5 x 4.5 x 0.7 inches" formatı
-      const lwh = cleanDims.match(/([0-9.]+)\s*[xX×]\s*([0-9.]+)\s*[xX×]\s*([0-9.]+)/)
+      // L x W x H
+      const lwh = cleanDims.match(/([0-9.]+)\s*L\s*[xX×]\s*([0-9.]+)\s*W\s*[xX×]\s*([0-9.]+)\s*H/i)
       if (lwh) {
-        console.log("[InventoryFlow] dims parsed LWH:", lwh[1], lwh[2], lwh[3])
+        console.log("[InventoryFlow] matched LWH:", lwh[1], lwh[2], lwh[3])
         if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = lwh[1] + " in"
         if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = lwh[2] + " in"
         if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = lwh[3] + " in"
         break
       }
+
+      // W x H
+      const wh = cleanDims.match(/([0-9.]+)\s*W\s*[xX×]\s*([0-9.]+)\s*H/i)
+      if (wh) {
+        console.log("[InventoryFlow] matched WH:", wh[1], wh[2])
+        if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = wh[1] + " in"
+        if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = wh[2] + " in"
+        if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = wh[1] + " in"
+        break
+      }
+
+      // L x W
+      const lw = cleanDims.match(/([0-9.]+)\s*L\s*[xX×]\s*([0-9.]+)\s*W/i)
+      if (lw) {
+        console.log("[InventoryFlow] matched LW:", lw[1], lw[2])
+        if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = lw[1] + " in"
+        if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = lw[2] + " in"
+        if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = lw[2] + " in"
+        break
+      }
+
+      // Genel N x N x N
+      const nnn = cleanDims.match(/([0-9.]+)\s*[xX×]\s*([0-9.]+)\s*[xX×]\s*([0-9.]+)/)
+      if (nnn) {
+        console.log("[InventoryFlow] matched NNN:", nnn[1], nnn[2], nnn[3])
+        if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = nnn[1] + " in"
+        if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = nnn[2] + " in"
+        if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = nnn[3] + " in"
+        break
+      }
+
+      // Genel N x N
+      const nn = cleanDims.match(/([0-9.]+)\s*[xX×]\s*([0-9.]+)/)
+      if (nn) {
+        console.log("[InventoryFlow] matched NN:", nn[1], nn[2])
+        if (!payload.itemSpecifics["Item Width"]) payload.itemSpecifics["Item Width"] = nn[1] + " in"
+        if (!payload.itemSpecifics["Item Length"]) payload.itemSpecifics["Item Length"] = nn[1] + " in"
+        if (!payload.itemSpecifics["Item Height"]) payload.itemSpecifics["Item Height"] = nn[2] + " in"
+        break
+      }
     }
 
-    console.log(
-      "[InventoryFlow] after dims:",
-      JSON.stringify({
-        length: payload.itemSpecifics["Item Length"],
-        width:  payload.itemSpecifics["Item Width"],
-        height: payload.itemSpecifics["Item Height"],
-      })
-    )
+    console.log("[InventoryFlow] after dims:", JSON.stringify({
+      length: payload.itemSpecifics["Item Length"],
+      width: payload.itemSpecifics["Item Width"],
+      height: payload.itemSpecifics["Item Height"],
+    }))
+
+    // Item Diameter -> Item Length/Width olarak kullan
+    const diameter = payload.itemSpecifics?.["Item Diameter"]
+    if (diameter && !payload.itemSpecifics["Item Length"]) {
+      const cleanDiam = diameter.replace(/[^0-9.]/g, "").trim()
+      if (cleanDiam) {
+        payload.itemSpecifics["Item Length"] = cleanDiam + " in"
+        payload.itemSpecifics["Item Width"] = cleanDiam + " in"
+      }
+    }
 
     const aspects = buildProductAspects(payload)
 

@@ -31,22 +31,13 @@ function isVideoThumbnailUrl(url: string): boolean {
 }
 
 function upscaleAmazonImageUrl(url: string): string {
-  // _AC_SL ile biten boyutları SL1500 yap
-  if (url.includes("._AC_SL")) {
-    return url.replace(/_AC_SL\d+_/g, "_AC_SL1500_")
-  }
-
-  // _AC_ varsa SL1500 ekle
-  if (url.includes("._AC_")) {
-    return url.replace(/\._AC_[^.]*\./g, "._AC_SL1500_.")
-  }
-
-  // SS boyutları
-  if (/SS\d+_/i.test(url)) {
-    return url.replace(/SS\d+_/gi, "SL1500_")
-  }
-
+  if (!url || !url.includes('media-amazon.com')) return url
+  // Zaten yüksek çözünürlüklüyse dokunma
+  if (url.includes('_SL3000_') || url.includes('_SL2000_')) return url
+  // Diğerlerini SL1500 yap
   return url
+    .replace(/\._[A-Z0-9_,]+_(?=\.(jpg|png|webp))/i, '._AC_SL1500_')
+    .replace(/\._[A-Z0-9_,]+_\./gi, '._AC_SL1500_.')
 }
 
 /**
@@ -211,7 +202,7 @@ export async function processProductImages(input: ImageProcessorInput): Promise<
 }
 
 /**
- * Her görsel: indir → max 1600×1600 inside → JPEG %92 → R2 (paralel, Promise.allSettled).
+ * Her görsel: indir → 2000×2000 contain (beyaz arka plan) → JPEG %92 → R2 (paralel, Promise.allSettled).
  * R2 veya işleme hatasında upscale edilmiş Amazon URL kullanılır (fallback); sıra ve uzunluk korunur.
  */
 export async function processAndUploadImages(input: ImageProcessorInput): Promise<string[]> {
@@ -226,17 +217,32 @@ export async function processAndUploadImages(input: ImageProcessorInput): Promis
   const results = await Promise.allSettled(
     urls.map(async (url, i) => {
       const buffer = await downloadImage(url)
+      console.log('[ImageProcessor] downloaded:', url, 'size:', buffer.length, 'bytes')
       const processed = await sharp(buffer)
-        .resize(1600, 1600, {
-          fit:               "inside",
-          withoutEnlargement: true,
+        .resize(2000, 2000, {
+          fit: 'inside',
+          withoutEnlargement: false,
+          kernel: sharp.kernel.lanczos3,
         })
-        .jpeg({ quality: 92, mozjpeg: false })
+        .toFormat('jpeg', {
+          quality: 100,
+          chromaSubsampling: '4:4:4',
+        })
         .toBuffer()
+      const meta = await sharp(processed).metadata()
+      console.log('[ImageProcessor] after sharp:', meta.width, 'x', meta.height, meta.format)
       const fileName = input.asin + "-" + (i + 1) + ".jpg"
       return await uploadToR2(processed, fileName)
     })
   )
+
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      console.log("[ImageProcessor] slot", i + 1, "R2:", r.value)
+    } else {
+      console.warn("[ImageProcessor] slot", i + 1, "FAILED:", r.reason?.message || r.reason)
+    }
+  })
 
   return results.map((r, i) => {
     if (r.status === "fulfilled") return r.value

@@ -345,7 +345,39 @@ export function buildDescription(input: AiListingInput, ebayTitle: string): stri
   </div>
 </div>`
 
-  return `<div style="max-width:900px;margin:0 auto;background:#fff;padding:16px;border:1px solid #e6e6e6;border-radius:8px;font-family:Arial,Helvetica,sans-serif;color:#111;">
+  const policyHtml = `
+<div style="font-family:Arial,sans-serif;max-width:700px;margin:20px auto 0;padding:0 12px;">
+
+  <!-- Shipping -->
+  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
+    <div style="font-size:22px;margin-bottom:6px;">✦</div>
+    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Shipping</div>
+    <p style="margin:0 0 5px;font-size:13px;color:#333;">We offer <strong style="color:#1a6db5;">Free Shipping</strong> to the US and ship within <strong style="color:#1a6db5;">1-3 business days</strong> of payment.</p>
+    <p style="margin:0 0 5px;font-size:13px;color:#333;">Most orders arrive within <strong style="color:#e67e00;">3-7 business days</strong> after dispatch.</p>
+    <p style="margin:0;font-size:13px;color:#333;">Tracking information is provided for every order.</p>
+  </div>
+
+  <!-- Returns -->
+  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
+    <div style="font-size:22px;margin-bottom:6px;">✦</div>
+    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Returns & Refunds</div>
+    <p style="margin:0 0 5px;font-size:13px;color:#333;">We offer a <strong style="color:#1a6db5;">30-Day Return Policy</strong> on all items.</p>
+    <p style="margin:0 0 5px;font-size:13px;color:#333;">You may request a <strong style="color:#1a6db5;">full refund</strong> or exchange if you are not completely satisfied.</p>
+    <p style="margin:0;font-size:13px;color:#e67e00;">No returns on items shipped outside of the US.</p>
+  </div>
+
+  <!-- Contact -->
+  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
+    <div style="font-size:22px;margin-bottom:6px;">✦</div>
+    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Contact & Support</div>
+    <p style="margin:0 0 5px;font-size:13px;color:#333;">We do our <strong style="color:#1a6db5;">very best</strong> to ensure every customer is completely satisfied.</p>
+    <p style="margin:0;font-size:13px;color:#333;">If there's a <strong style="color:#e67e00;">problem</strong>, message us — we're happy to help. <strong style="color:#1a6db5;">Fast response</strong> guaranteed.</p>
+  </div>
+
+</div>
+`
+
+  const existingHtml = `<div style="max-width:900px;margin:0 auto;background:#fff;padding:16px;border:1px solid #e6e6e6;border-radius:8px;font-family:Arial,Helvetica,sans-serif;color:#111;">
 ${coverHtml}
 ${greenBannerHtml}
 ${titleHtml}
@@ -353,6 +385,11 @@ ${bulletsHtml}
 ${descHtml}
 ${footerHtml}
 </div>`
+
+  console.log("[buildDescription] policyHtml length:", policyHtml.length)
+  console.log("[buildDescription] total length:", (existingHtml + policyHtml).length)
+
+  return existingHtml + policyHtml
 }
 
 export const BLOCKED_KEYS = [

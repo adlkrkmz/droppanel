@@ -75,31 +75,69 @@ const BASE_RESET = `font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;bo
 // ─── TEMPLATE 1: MINIMAL CLEAN ────────────────────────────────
 
 function renderMinimalClean(input: TemplateInput): string {
-  const title  = clean(input.title)
-  const brand  = clean(input.brand ?? "")
-  const bs     = bullets(input)
-  const ship   = clean(input.shippingNote ?? "")
-  const ret    = clean(input.returnNote ?? "")
-  const note   = clean(input.sellerNote ?? "")
+  const HERO_PLACEHOLDER = "HERO_IMAGE_PLACEHOLDER"
+  const title = input.title || ""
+  const bullets = input.bullets || []
 
-  const bulletHtml = bs.length > 0
-    ? `<ul style="margin:8px 0 0 0;padding-left:20px;color:#444;font-size:14px;line-height:1.7">
-        ${bs.map(b => `<li>${b}</li>`).join("\n        ")}
-       </ul>`
-    : ""
+  const bulletItems = bullets.slice(0, 5).map(b => {
+    const firstWord = b.split(' ').slice(0, 2).join(' ')
+    const rest = b.split(' ').slice(2).join(' ')
+    return `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px 12px;background:#f9fafb;border-left:3px solid #1a6db5;border-radius:0 6px 6px 0;">
+      <span style="color:#1a6db5;font-size:16px;line-height:1;margin-top:1px;">&#10003;</span>
+      <p style="margin:0;font-size:13px;color:#222;line-height:1.6;"><strong style="color:#111;">${firstWord}</strong> ${rest}</p>
+    </div>`
+  }).join('')
 
-  const metaRows = [
-    ship ? `<tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">🚚 Shipping</td><td style="font-size:13px;color:#444">${ship}</td></tr>` : "",
-    ret  ? `<tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">🔄 Returns</td><td style="font-size:13px;color:#444">${ret}</td></tr>` : "",
-    note ? `<tr><td style="padding:4px 12px 4px 0;color:#888;font-size:12px;white-space:nowrap">📝 Note</td><td style="font-size:13px;color:#444">${note}</td></tr>` : "",
-  ].filter(Boolean).join("\n")
+  const html = `<div style="font-family:Arial,sans-serif;max-width:860px;margin:0 auto;padding:16px;color:#111;background:#fff;">
 
-  return `<div style="${BASE_RESET}max-width:680px;padding:20px;background:#fff;color:#222">
-  ${brand ? `<p style="margin:0 0 4px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#999">${brand}</p>` : ""}
-  <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#111;line-height:1.3">${title}</h2>
-  ${bulletHtml}
-  ${metaRows ? `<table style="margin-top:16px;border-collapse:collapse;width:100%">${metaRows}</table>` : ""}
+  <div style="background:#f7f8fa;border-radius:12px;overflow:hidden;margin-bottom:18px;text-align:center;padding:10px;">
+    <img src="${HERO_PLACEHOLDER}" style="max-width:100%;max-height:420px;object-fit:contain;display:block;margin:0 auto;" />
+  </div>
+
+  <h2 style="font-size:19px;font-weight:800;color:#111;margin:0 0 10px;line-height:1.3;border-bottom:2px solid #e8edf2;padding-bottom:10px;">${title}</h2>
+
+  <div style="background:linear-gradient(135deg,#1a6db5,#2980d4);border-radius:8px;padding:11px 16px;margin-bottom:18px;">
+    <span style="font-size:12px;color:#fff;font-weight:700;letter-spacing:0.5px;">&#10022; Free US Shipping &nbsp;&nbsp; &#10022; Same Day Dispatch &nbsp;&nbsp; &#10022; 30-Day Returns &nbsp;&nbsp; &#10022; Fast Support</span>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="width:54%;vertical-align:top;padding-right:20px;">
+        <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #eee;">Product Highlights</div>
+        ${bulletItems}
+      </td>
+
+      <td style="width:46%;vertical-align:top;">
+        <div style="border:1.5px solid #d0e4f7;border-radius:12px;padding:16px;margin-bottom:10px;background:linear-gradient(145deg,#f0f7ff,#e8f3ff);">
+          <div style="font-size:13px;font-weight:800;color:#1a3a6b;margin-bottom:8px;letter-spacing:0.3px;">&#9992; &nbsp;Shipping</div>
+          <p style="margin:0 0 5px;font-size:12px;color:#333;line-height:1.6;"><strong style="color:#1a6db5;">Free Shipping</strong> across the US.</p>
+          <p style="margin:0 0 5px;font-size:12px;color:#333;line-height:1.6;">Same day dispatch — arrives in <strong style="color:#d4640a;">1–3 business days</strong>.</p>
+          <p style="margin:0;font-size:12px;color:#333;">Full tracking on every order.</p>
+        </div>
+
+        <div style="border:1.5px solid #d0e4f7;border-radius:12px;padding:16px;margin-bottom:10px;background:linear-gradient(145deg,#f0f7ff,#e8f3ff);">
+          <div style="font-size:13px;font-weight:800;color:#1a3a6b;margin-bottom:8px;letter-spacing:0.3px;">&#8635; &nbsp;Returns &amp; Refunds</div>
+          <p style="margin:0 0 5px;font-size:12px;color:#333;line-height:1.6;"><strong style="color:#1a6db5;">30-Day Return Policy</strong> — no questions asked.</p>
+          <p style="margin:0 0 5px;font-size:12px;color:#333;line-height:1.6;">Full refund or exchange guaranteed.</p>
+          <p style="margin:0;font-size:12px;color:#c0392b;font-weight:600;">US orders only.</p>
+        </div>
+
+        <div style="border:1.5px solid #d0e4f7;border-radius:12px;padding:16px;background:linear-gradient(145deg,#f0f7ff,#e8f3ff);">
+          <div style="font-size:13px;font-weight:800;color:#1a3a6b;margin-bottom:8px;letter-spacing:0.3px;">&#9993; &nbsp;Support</div>
+          <p style="margin:0 0 5px;font-size:12px;color:#333;line-height:1.6;">Your satisfaction is our priority.</p>
+          <p style="margin:0;font-size:12px;color:#333;line-height:1.6;">Message us anytime — <strong style="color:#1a6db5;">fast response guaranteed</strong>.</p>
+        </div>
+      </td>
+    </tr>
+  </table>
+
 </div>`
+
+  if (html.length > 3800) {
+    const mainHtml = html.slice(0, 1800)
+    return mainHtml + '</div>'
+  }
+  return html
 }
 
 // ─── TEMPLATE 2: MODERN SALES ─────────────────────────────────
@@ -220,6 +258,11 @@ export function renderTemplate(
     case "premium_brand":  html = renderPremiumBrand(input);  break
     case "minimal_pro":    html = renderMinimalPro(input);    break
     default:               html = renderMinimalClean(input);
+  }
+
+  // eBay limit: 4000 karakter
+  if (html.length > 3800) {
+    html = html.slice(0, 4000)
   }
 
   return {
