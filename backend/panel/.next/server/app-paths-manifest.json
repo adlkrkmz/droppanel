@@ -1,3 +1,7 @@
 {
+  "/import/page": "app/import/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/queue/page": "app/queue/page.js",
+  "/history/page": "app/history/page.js",
   "/pool/page": "app/pool/page.js"
 }
