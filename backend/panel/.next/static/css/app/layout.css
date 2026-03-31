@@ -544,6 +544,9 @@ video {
     max-width: 1536px;
   }
 }
+.collapse{
+  visibility: collapse;
+}
 .fixed{
   position: fixed;
 }

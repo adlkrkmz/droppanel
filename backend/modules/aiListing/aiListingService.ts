@@ -282,114 +282,36 @@ export async function selectBestCategory(
   }
 }
 
-export function buildDescription(input: AiListingInput, ebayTitle: string): string {
-  const coverImage = input.images?.[0] ? String(input.images[0]).trim() : ""
+const POLICY_IMAGE_URL = "https://img.listjetgo.com/1.png"
+const EBAY_DESC_LIMIT  = 4000
 
+export function buildDescription(input: AiListingInput, ebayTitle: string): string {
   const titleText = escapeHtml(cleanText(ebayTitle))
 
   const bullets = (input.bullets ?? [])
     .map((b) => cleanText(b))
     .filter((b) => b.length > 0)
-    .slice(0, 8)
+    .slice(0, 5)
     .map(escapeHtml)
 
-  const descRaw = input.description ? cleanText(input.description) : ""
-  const amazonDesc = descRaw ? escapeHtml(descRaw) : ""
-
-  const coverHtml = coverImage
-    ? `<div style="margin:0 0 12px 0;">
-  <img src="${escapeHtmlAttr(coverImage)}" style="max-width:100%;display:block;margin:0 auto;border-radius:6px;">
-</div>`
-    : ""
-
-  const greenBannerHtml = `<div style="margin:0 0 14px 0;padding:10px 12px;background:#16a34a;color:#fff;font-weight:700;border-radius:6px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.25;">
-  ✅ FREE &amp; FAST SHIPPING | ✅ 30-DAY RETURNS | ✅ 100% SATISFACTION
-</div>`
-
-  const titleHtml = `<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.25;margin:0 0 12px 0;color:#111;text-align:center;">${titleText}</h2>`
+  const titleHtml = `<h2 style="font-family:Arial,sans-serif;font-size:18px;font-weight:800;color:#111;margin:0 0 12px;line-height:1.3;border-bottom:2px solid #e8edf2;padding-bottom:10px;">${titleText}</h2>`
 
   const bulletsHtml = bullets.length
-    ? `<ul style="margin:0 0 14px 0;padding:0;list-style:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#222;">
-  ${bullets
-    .map(
-      (b) =>
-        `<li style="margin:0 0 8px 0;">
-  <span style="margin-right:10px;color:#16a34a;font-weight:800;">✅</span><span>${b}</span>
-</li>`,
-    )
-    .join("\n")}
-</ul>`
+    ? `<div style="margin-bottom:14px;">${bullets.map((b) =>
+        `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;padding:8px 12px;background:#f9fafb;border-left:3px solid #1a6db5;border-radius:0 6px 6px 0;"><span style="color:#1a6db5;font-size:15px;line-height:1;">&#10003;</span><span style="font-size:13px;color:#222;line-height:1.5;">${b}</span></div>`
+      ).join("")}</div>`
     : ""
 
-  const descHtml = amazonDesc
-    ? `<p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#222;">${amazonDesc}</p>`
-    : ""
+  const policyImgHtml = `<div style="text-align:center;margin-top:8px;"><img src="${POLICY_IMAGE_URL}" style="max-width:100%;display:block;margin:0 auto;" /></div>`
 
-  const footerHtml = `<div style="margin-top:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;">
-  <div style="display:flex;gap:14px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:220px;text-align:center;font-family:Arial,Helvetica,sans-serif;">
-      <div style="font-size:26px;line-height:1;margin:0 0 6px 0;">🚚</div>
-      <div style="font-weight:800;font-size:13px;letter-spacing:0.2px;margin:0 0 3px 0;color:#065f46;">FAST SHIPPING</div>
-      <div style="font-size:12px;color:#166534;line-height:1.4;">We ship quickly after payment</div>
-    </div>
-    <div style="flex:1;min-width:220px;text-align:center;font-family:Arial,Helvetica,sans-serif;">
-      <div style="font-size:26px;line-height:1;margin:0 0 6px 0;">↩️</div>
-      <div style="font-weight:800;font-size:13px;letter-spacing:0.2px;margin:0 0 3px 0;color:#065f46;">30-DAY RETURNS</div>
-      <div style="font-size:12px;color:#166534;line-height:1.4;">Easy returns within 30 days</div>
-    </div>
-    <div style="flex:1;min-width:220px;text-align:center;font-family:Arial,Helvetica,sans-serif;">
-      <div style="font-size:26px;line-height:1;margin:0 0 6px 0;">🛡️</div>
-      <div style="font-weight:800;font-size:13px;letter-spacing:0.2px;margin:0 0 3px 0;color:#065f46;">100% SATISFACTION</div>
-      <div style="font-size:12px;color:#166534;line-height:1.4;">Buy with confidence</div>
-    </div>
-  </div>
-</div>`
+  const html = `<div style="font-family:Arial,sans-serif;max-width:860px;margin:0 auto;padding:16px;color:#111;background:#fff;">${titleHtml}${bulletsHtml}${policyImgHtml}</div>`
 
-  const policyHtml = `
-<div style="font-family:Arial,sans-serif;max-width:700px;margin:20px auto 0;padding:0 12px;">
+  const result = html.length > EBAY_DESC_LIMIT
+    ? html.slice(0, EBAY_DESC_LIMIT - 6) + "</div>"
+    : html
 
-  <!-- Shipping -->
-  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
-    <div style="font-size:22px;margin-bottom:6px;">✦</div>
-    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Shipping</div>
-    <p style="margin:0 0 5px;font-size:13px;color:#333;">We offer <strong style="color:#1a6db5;">Free Shipping</strong> to the US and ship within <strong style="color:#1a6db5;">1-3 business days</strong> of payment.</p>
-    <p style="margin:0 0 5px;font-size:13px;color:#333;">Most orders arrive within <strong style="color:#e67e00;">3-7 business days</strong> after dispatch.</p>
-    <p style="margin:0;font-size:13px;color:#333;">Tracking information is provided for every order.</p>
-  </div>
-
-  <!-- Returns -->
-  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
-    <div style="font-size:22px;margin-bottom:6px;">✦</div>
-    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Returns & Refunds</div>
-    <p style="margin:0 0 5px;font-size:13px;color:#333;">We offer a <strong style="color:#1a6db5;">30-Day Return Policy</strong> on all items.</p>
-    <p style="margin:0 0 5px;font-size:13px;color:#333;">You may request a <strong style="color:#1a6db5;">full refund</strong> or exchange if you are not completely satisfied.</p>
-    <p style="margin:0;font-size:13px;color:#e67e00;">No returns on items shipped outside of the US.</p>
-  </div>
-
-  <!-- Contact -->
-  <div style="border:1.5px solid #1a6db5;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:#f8fbff;">
-    <div style="font-size:22px;margin-bottom:6px;">✦</div>
-    <div style="font-weight:700;font-size:14px;color:#1a1a1a;margin-bottom:8px;">Contact & Support</div>
-    <p style="margin:0 0 5px;font-size:13px;color:#333;">We do our <strong style="color:#1a6db5;">very best</strong> to ensure every customer is completely satisfied.</p>
-    <p style="margin:0;font-size:13px;color:#333;">If there's a <strong style="color:#e67e00;">problem</strong>, message us — we're happy to help. <strong style="color:#1a6db5;">Fast response</strong> guaranteed.</p>
-  </div>
-
-</div>
-`
-
-  const existingHtml = `<div style="max-width:900px;margin:0 auto;background:#fff;padding:16px;border:1px solid #e6e6e6;border-radius:8px;font-family:Arial,Helvetica,sans-serif;color:#111;">
-${coverHtml}
-${greenBannerHtml}
-${titleHtml}
-${bulletsHtml}
-${descHtml}
-${footerHtml}
-</div>`
-
-  console.log("[buildDescription] policyHtml length:", policyHtml.length)
-  console.log("[buildDescription] total length:", (existingHtml + policyHtml).length)
-
-  return existingHtml + policyHtml
+  console.log("[buildDescription] length:", result.length)
+  return result
 }
 
 export const BLOCKED_KEYS = [

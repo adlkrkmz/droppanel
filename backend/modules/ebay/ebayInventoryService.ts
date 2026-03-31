@@ -380,21 +380,64 @@ export async function runInventoryFlow(
       throw new Error(SETTINGS_ERROR)
     }
 
-    console.log(`  [InventoryFlow] Upload ${payload.images.length} image(s) to R2 for ASIN=${asin}`)
-    console.log("[InventoryFlow] payload.images:", payload.images?.slice(0, 2))
+    // ── Image upload ──────────────────────────────────────────────────────
+    if (!payload.images || payload.images.length === 0) {
+      console.warn(`  [InventoryFlow] ASIN=${asin} — payload.images BOŞ! amazon_product_cache.images NULL olabilir. Görsel yüklenemeyecek.`)
+    } else {
+      console.log(`  [InventoryFlow] Upload ${payload.images.length} image(s) to R2 for ASIN=${asin}`)
+      console.log("[InventoryFlow] payload.images[0]:", payload.images[0])
+    }
+
     let imageUrls = await processAndUploadImages({
       imageUrls: payload.images,
       asin:      payload.asin,
     })
-    console.log("[InventoryFlow] Image URLs:", imageUrls.slice(0, 2))
+    console.log("[InventoryFlow] imageUrls count:", imageUrls.length, "| [0]:", imageUrls[0] ?? "(empty)")
 
     if (!imageUrls || imageUrls.length === 0) {
-      console.warn("[InventoryFlow] No images available, using placeholder")
+      console.warn(`  [InventoryFlow] ASIN=${asin} — imageUrls boş döndü. Description'da görsel olmayacak.`)
       imageUrls = []
     }
 
+    // ── Description + hero image replacement ──────────────────────────────
+    const heroUrl = imageUrls[0] ?? ""
+
+    // description'da HERO_IMAGE_PLACEHOLDER var mı? (template fallback durumunu yakala)
+    const hasPlaceholder = payload.description.includes("HERO_IMAGE_PLACEHOLDER")
+    const hasImgTag      = payload.description.includes("<img")
+    console.log(`[InventoryFlow] description hasPlaceholder=${hasPlaceholder} hasImgTag=${hasImgTag} heroUrl=${heroUrl.slice(0, 60) || "(empty)"}`)
+
+    if (!hasPlaceholder && !hasImgTag) {
+      console.warn(`[InventoryFlow] ASIN=${asin} — description'da ne placeholder ne img var. aiDescription fallback kullanılmış olabilir.`)
+    }
+
     let description = rewriteDescriptionImageUrls(payload.description, payload.images, imageUrls)
-    description = description.replace("HERO_IMAGE_PLACEHOLDER", imageUrls[0] || "")
+
+    // HERO_IMAGE_PLACEHOLDER hâlâ varsa (regex match etmemişse) elle değiştir
+    if (description.includes("HERO_IMAGE_PLACEHOLDER")) {
+      if (heroUrl) {
+        description = description.replace(/HERO_IMAGE_PLACEHOLDER/g, heroUrl)
+        console.log("[InventoryFlow] HERO_IMAGE_PLACEHOLDER manuel replace yapıldı:", heroUrl.slice(0, 60))
+      } else {
+        // URL yok — placeholder'ı içeren img div'ini kaldır
+        description = description.replace(
+          /<div[^>]*>\s*<img[^>]*src=["']HERO_IMAGE_PLACEHOLDER["'][^>]*\/?>[\s\S]*?<\/div>/i,
+          ""
+        )
+        description = description.replace(/HERO_IMAGE_PLACEHOLDER/g, "")
+        console.warn("[InventoryFlow] Görsel URL yok — hero image description'dan kaldırıldı.")
+      }
+    }
+
+    // ── eBay 4000 karakter limiti — URL replacement sonrası kesin kontrol ──
+    // renderTemplate'teki limit URL'ler eklenmeden önce çalışır; burada son kontrol şart.
+    if (description.length > 4000) {
+      const before = description.length
+      const cut    = description.slice(0, 4000)
+      const last   = cut.lastIndexOf(">")
+      description  = last > 0 ? cut.slice(0, last + 1) : cut
+      console.warn(`[InventoryFlow] ASIN=${asin} — description ${before} → ${description.length} karaktere kısaltıldı (eBay limiti)`)
+    }
 
     await tryEnsureWarehouseLocation(client, payload.storeCode, storeRow)
 

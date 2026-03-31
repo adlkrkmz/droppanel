@@ -141,10 +141,39 @@
   }
 
   function getDescription() {
-    const desc = document.querySelector('#productDescription p, #productDescription');
-    if (desc) return text(desc);
-    const aplus = document.querySelector('#aplus_feature_div');
-    if (aplus) return text(aplus).slice(0, 5000);
+    // Önce klasik #productDescription — tüm paragraf ve liste öğelerini al
+    const descBlock = document.querySelector('#productDescription');
+    if (descBlock) {
+      // Tüm metin içerikli öğeleri topla
+      const parts = [];
+      descBlock.querySelectorAll('p, li, span.a-list-item').forEach(function(el) {
+        const t = (el.textContent || '').trim();
+        if (t && t.length > 10) parts.push(t);
+      });
+      if (parts.length > 0) return parts.join(' ').slice(0, 5000);
+      // Fallback: tüm textContent
+      const t = text(descBlock);
+      if (t) return t.slice(0, 5000);
+    }
+
+    // Yeni Amazon layout: #productDescription_feature_div
+    const descFeature = document.querySelector('#productDescription_feature_div');
+    if (descFeature) {
+      const t = text(descFeature);
+      if (t) return t.slice(0, 5000);
+    }
+
+    // A+ içerik (genelde görsel ağırlıklı ama yine de dene)
+    const aplus = document.querySelector('#aplus_feature_div, #aplus');
+    if (aplus) {
+      const parts = [];
+      aplus.querySelectorAll('p, li, h3, h4').forEach(function(el) {
+        const t = (el.textContent || '').trim();
+        if (t && t.length > 10) parts.push(t);
+      });
+      if (parts.length > 0) return parts.join(' ').slice(0, 5000);
+    }
+
     return '';
   }
 

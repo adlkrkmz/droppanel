@@ -121,6 +121,96 @@ function jobStage(job: any): string {
   return parts[0] || "—"
 }
 
+function translateEbayError(raw: string | null | undefined): string {
+  if (!raw) return "Bilinmeyen hata"
+  const m = raw.toLowerCase()
+  if (m.includes("pesticide") || m.includes("1194569"))
+    return "❌ Yasaklı kategori: Bu ürün eBay'de pestisit/kimyasal kategorisinde — yüklenemez."
+  if (m.includes("item width") || m.includes("item length") || m.includes("item height"))
+    return "❌ Eksik ölçü: eBay bu kategori için ürün boyutları (en/boy/yükseklik) gerektiriyor."
+  if (m.includes("listingduration") || m.includes("listing duration"))
+    return "❌ Listeleme süresi hatası: eBay bu format için izin verilen süre aşıldı."
+  if (m.includes("does not apply") && m.includes("brand"))
+    return "❌ Marka bilgisi eksik veya geçersiz."
+  if (m.includes("category") && (m.includes("not found") || m.includes("invalid")))
+    return "❌ Kategori bulunamadı veya geçersiz. Ürün kategorisi eBay'de eşleşmiyor."
+  if (m.includes("price") && (m.includes("too low") || m.includes("minimum")))
+    return "❌ Fiyat çok düşük: eBay minimum fiyat kuralını karşılamıyor."
+  if (m.includes("description") && m.includes("length"))
+    return "❌ Açıklama çok uzun: eBay 4000 karakter limitini aşıyor."
+  if (m.includes("image") || m.includes("picture"))
+    return "❌ Görsel hatası: Görsel yüklenemedi veya geçersiz format/URL."
+  if (m.includes("offer entity already exists"))
+    return "⚠ Bu ürün eBay'de zaten mevcut (offer duplicate)."
+  if (m.includes("token") || m.includes("oauth") || m.includes("unauthorized") || m.includes("401"))
+    return "❌ eBay bağlantısı kesildi: OAuth token geçersiz, yeniden bağlanmanız gerekiyor."
+  if (m.includes("forbidden") || m.includes("403"))
+    return "❌ Yetki hatası: Bu işlem için eBay izni yok."
+  if (m.includes("not found in pool") || m.includes("pool"))
+    return "❌ Ürün havuzda bulunamadı."
+  if (m.includes("failed to fetch") || m.includes("network") || m.includes("econnrefused"))
+    return "❌ Bağlantı hatası: Backend veya eBay API'ye ulaşılamıyor."
+  if (m.includes("store settings") || m.includes("policy"))
+    return "❌ Mağaza ayarları eksik: Fulfillment / Payment / Return policy ayarlanmamış."
+  if (m.includes("r2") || m.includes("s3") || m.includes("upload"))
+    return "❌ Görsel yükleme hatası: R2 depolama alanına erişilemiyor."
+  if (m.includes("timeout") || m.includes("timed out"))
+    return "❌ Zaman aşımı: eBay API isteği çok uzun sürdü."
+  // Kısaltılmış orijinal hata
+  return `❌ ${raw.slice(0, 120)}`
+}
+
+function FailedJobsBanner({ jobs }: { jobs: any[] }) {
+  const failed = jobs.filter(j => j.status === "failed")
+  if (failed.length === 0) return null
+  return (
+    <div style={{
+      marginBottom: 16,
+      background: "rgba(255,68,85,0.06)",
+      border: "1.5px solid rgba(255,68,85,0.35)",
+      borderRadius: 4,
+      overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "10px 14px",
+        background: "rgba(255,68,85,0.12)",
+        borderBottom: "1px solid rgba(255,68,85,0.2)",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}>
+        <span style={{ fontSize: 16 }}>⚠</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 800, color: "var(--danger)", letterSpacing: "0.5px" }}>
+          {failed.length} ürün eBay&apos;e yüklenemedi
+        </span>
+      </div>
+      <div>
+        {failed.map((job, i) => (
+          <div key={job.id ?? i} style={{
+            padding: "10px 14px",
+            borderBottom: i < failed.length - 1 ? "1px solid rgba(255,68,85,0.12)" : "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, color: "var(--text)" }}>
+                {job.asin ?? "—"}
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "var(--dim)" }}>
+                Aşama: {job.failedStage ?? "unknown"}
+              </span>
+            </div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--danger)", lineHeight: 1.5 }}>
+              {translateEbayError(job.lastError)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────
 
 export default function DispatchPage() {
@@ -375,6 +465,9 @@ export default function DispatchPage() {
 
               {!runStatusLoading && runStatus && (
                 <>
+                  {/* Failed jobs banner */}
+                  <FailedJobsBanner jobs={runStatus.jobs ?? []} />
+
                   {/* Summary stats */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
                     {(() => {
@@ -527,6 +620,31 @@ export default function DispatchPage() {
               >
                 {loading ? "Running…" : dryRun ? "▶ Dry Run Listing" : "▶ Start Listing Run"}
               </button>
+
+              {/* Failed items banner for legacy run */}
+              {result && result.publish.failed > 0 && (
+                <div style={{
+                  background: "rgba(255,68,85,0.06)",
+                  border: "1.5px solid rgba(255,68,85,0.35)",
+                  borderRadius: 4,
+                  overflow: "hidden",
+                }}>
+                  <div style={{ padding: "10px 14px", background: "rgba(255,68,85,0.12)", borderBottom: "1px solid rgba(255,68,85,0.2)", display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 16 }}>⚠</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 800, color: "var(--danger)" }}>
+                      {result.publish.failed} ürün eBay&apos;e yüklenemedi
+                    </span>
+                  </div>
+                  {result.publish.items.filter(i => i.status === "failed").map((item, idx) => (
+                    <div key={item.poolId} style={{ padding: "10px 14px", borderBottom: idx < result.publish.items.filter(i => i.status === "failed").length - 1 ? "1px solid rgba(255,68,85,0.12)" : "none", display: "flex", flexDirection: "column", gap: 4 }}>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, color: "var(--text)" }}>{item.asin}</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--danger)", lineHeight: 1.5 }}>
+                        {translateEbayError(item.guardErrors?.[0] ?? null)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Result stats */}
               {result && (
