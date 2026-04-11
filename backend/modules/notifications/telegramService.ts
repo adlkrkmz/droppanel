@@ -67,3 +67,9 @@ export async function alertBackupFailed(error: string): Promise<void> {
     `💾 <b>Backup Başarısız!</b>\nVeritabanı yedeği alınamadı!\nHata: ${error.slice(0, 200)}`
   )
 }
+
+export async function alertScraperFailSpike(failCount: number, totalCount: number): Promise<void> {
+  await sendTelegramAlert(
+    `🕷️ <b>Scraper Fail Spike!</b>\nSon ${totalCount} job'un ${failCount} tanesi başarısız!\nScraper'ı kontrol et.`
+  )
+}

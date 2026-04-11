@@ -1,6 +1,6 @@
 import { query } from "../../db/client"
 import { addNotification } from "../notifications/notificationService"
-import { alertQueueStuck } from "../notifications/telegramService"
+import { alertQueueStuck, alertScraperFailSpike } from "../notifications/telegramService"
 import {
   createDispatchJobsBulk,
   createDispatchRun,
@@ -34,6 +34,7 @@ import type {
 } from "./dispatchJobsTypes"
 
 let lastQueueAlertTime = 0
+let lastScraperAlertTime = 0
 
 type CreateRunRow = Awaited<ReturnType<typeof createDispatchRun>>
 type JobRow = Awaited<ReturnType<typeof reportJobProgress>>
@@ -246,5 +247,32 @@ export async function checkQueueHealth(): Promise<void> {
     }
   } catch (e) {
     console.error("[QueueHealth] Check failed:", e)
+  }
+}
+
+export async function checkScraperHealth(): Promise<void> {
+  try {
+    const result = await query<{ fail_count: string; total_count: string }>(
+      `SELECT
+        COUNT(*) FILTER (WHERE status = 'failed')::text AS fail_count,
+        COUNT(*)::text AS total_count
+       FROM dispatch_jobs
+       WHERE created_at > NOW() - INTERVAL '30 minutes'
+         AND job_type = 'scrape_and_list'`,
+      []
+    )
+
+    const failCount = parseInt(result.rows[0]?.fail_count ?? "0", 10)
+    const totalCount = parseInt(result.rows[0]?.total_count ?? "0", 10)
+
+    if (totalCount >= 5 && failCount / totalCount >= 0.7) {
+      const now = Date.now()
+      if (now - lastScraperAlertTime > 30 * 60 * 1000) {
+        lastScraperAlertTime = now
+        await alertScraperFailSpike(failCount, totalCount)
+      }
+    }
+  } catch (e) {
+    console.error("[ScraperHealth] Check failed:", e)
   }
 }

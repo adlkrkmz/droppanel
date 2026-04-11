@@ -1,6 +1,6 @@
 import "dotenv/config"
 import { startServer } from "./modules/http/httpServer"
-import { checkQueueHealth } from "./modules/dispatchJobs/dispatchJobsService"
+import { checkQueueHealth, checkScraperHealth } from "./modules/dispatchJobs/dispatchJobsService"
 import { alertHealthCheckFailed } from "./modules/notifications/telegramService"
 import { query } from "./db/client"
 
@@ -37,3 +37,7 @@ setInterval(() => {
 setInterval(() => {
   runHealthCheck().catch(console.error)
 }, 2 * 60 * 1000)
+
+setInterval(() => {
+  checkScraperHealth().catch(console.error)
+}, 10 * 60 * 1000)
