@@ -209,6 +209,10 @@ export async function processAndUploadImages(input: ImageProcessorInput): Promis
   const urls = input.imageUrls
     .filter((u) => typeof u === "string" && u.trim().length > 0)
     .filter((u) => !isVideoThumbnailUrl(u))
+    .map(url => {
+      if (url.includes('kwcdn.com')) return url.split('?')[0]
+      return url
+    })
     .map(upscaleAmazonImageUrl)
     .slice(0, MAX_IMAGES)
 

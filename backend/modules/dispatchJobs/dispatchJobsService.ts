@@ -1,4 +1,5 @@
 import { query } from "../../db/client"
+import { addNotification } from "../notifications/notificationService"
 import {
   createDispatchJobsBulk,
   createDispatchRun,
@@ -8,6 +9,20 @@ import {
   getRunStatus as getRunStatusRepo,
   getActiveRuns as getActiveRunsRepo,
 } from "./dispatchJobsRepository"
+
+function isPermanentError(errorMessage: string): boolean {
+  return (
+    errorMessage.includes('HTTP 400') ||
+    errorMessage.includes('publishOffer failed') ||
+    errorMessage.includes('Pesticides') ||
+    errorMessage.includes('too many item specifics') ||
+    errorMessage.includes('Item Width') ||
+    errorMessage.includes('Item Length') ||
+    errorMessage.includes('Item Height') ||
+    errorMessage.includes('Unbranded products') ||
+    errorMessage.includes('policy')
+  )
+}
 import type {
   ClaimNextJobResult,
   CreateRunRequest,
@@ -50,6 +65,7 @@ function mapJob(row: NonNullable<ClaimRow>): DispatchJob {
     storeCode: row.store_code,
     asin: row.asin,
     poolId: row.pool_id,
+    jobType: (row.job_type ?? "scrape_and_list") as DispatchJob["jobType"],
     status: row.status,
     quantity: row.quantity,
     delaySeconds: row.delay_seconds,
@@ -87,8 +103,8 @@ export async function createRunWithJobs(
   const storeId = storeResult.rows[0]?.id
   if (!storeId) throw new Error(`Active store not found: storeCode="${storeCode}"`)
 
-  const poolResult = await query<{ asin: string; pool_id: number | null }>(
-    `SELECT ar.asin, ap.id AS pool_id
+  const poolResult = await query<{ asin: string; pool_id: number | null; pipeline_stage: string }>(
+    `SELECT ar.asin, ap.id AS pool_id, ap.pipeline_stage
      FROM asin_pool ap
      INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
      WHERE ap.workspace_id = $1
@@ -96,11 +112,18 @@ export async function createRunWithJobs(
     [workspaceId, poolIds]
   )
 
+  function resolveJobType(stage: string): string {
+    if (stage === "ai_generated") return "list_only"
+    if (stage === "scraped")      return "ai_and_list"
+    return "scrape_and_list" // validated, imported, unknown
+  }
+
   const jobs = poolResult.rows.map(r => ({
     asin: r.asin,
     poolId: r.pool_id,
     quantity,
     delaySeconds,
+    jobType: resolveJobType(r.pipeline_stage ?? ""),
   }))
 
   const run = await createDispatchRun(workspaceId, storeId, storeCode, delaySeconds, quantity, jobs.length)
@@ -121,6 +144,16 @@ export async function createRunWithJobs(
 
   const updated = startedRun.rows[0]
   if (!updated) throw new Error("Failed to update dispatch_runs to running")
+  try {
+    await addNotification(
+      workspaceId,
+      "info",
+      "Dispatch Run Başlatıldı",
+      `${jobs.length} ürün kuyruğa alındı — ${storeCode}`
+    )
+  } catch {
+    /* bildirim ana akışı bozmasın */
+  }
   return mapRun(updated)
 }
 
@@ -144,8 +177,26 @@ export async function reportProgress(
 ): Promise<{ job: DispatchJob | null; run: DispatchRun | null }> {
   if (!workerId || workerId.trim() === "") throw new Error("workerId is required")
 
-  const jobRow = await reportJobProgress(jobId, status, error, failedStage)
+  const permanent = status === "failed" && !!error && isPermanentError(error)
+  if (permanent) {
+    console.warn(`[dispatchJobs] Permanent error detected for job ${jobId}, skipping retry: ${error}`)
+  }
+
+  const jobRow = await reportJobProgress(jobId, status, error, failedStage, permanent)
   if (!jobRow) return { job: null, run: null }
+
+  if (permanent && jobRow.pool_id != null) {
+    await query(
+      `UPDATE asin_pool
+       SET status         = 'skipped',
+           listing_status = 'failed',
+           updated_at     = NOW()
+       WHERE id = $1`,
+      [jobRow.pool_id]
+    ).catch((e: unknown) => {
+      console.warn(`[dispatchJobs] Failed to mark pool ${jobRow.pool_id} as skipped:`, e)
+    })
+  }
 
   const runRow = await updateRunCounters(jobRow.run_id)
   return {

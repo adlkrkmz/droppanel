@@ -25,6 +25,7 @@ type DispatchJobRow = {
   store_code: string
   asin: string
   pool_id: number | null
+  job_type: "scrape_and_list" | "ai_and_list" | "list_only"
   status:
     | "pending"
     | "claimed"
@@ -82,18 +83,19 @@ export async function createDispatchJobsBulk(
   workspaceId: string,
   storeId: number,
   storeCode: string,
-  jobs: Array<{ asin: string; poolId: number | null; quantity: number; delaySeconds: number }>
+  jobs: Array<{ asin: string; poolId: number | null; quantity: number; delaySeconds: number; jobType: string }>
 ): Promise<number> {
   if (jobs.length === 0) return 0
 
-  const asins = jobs.map(j => j.asin)
-  const poolIds = jobs.map(j => j.poolId)
+  const asins     = jobs.map(j => j.asin)
+  const poolIds   = jobs.map(j => j.poolId)
   const quantities = jobs.map(j => j.quantity)
-  const delays = jobs.map(j => j.delaySeconds)
+  const delays    = jobs.map(j => j.delaySeconds)
+  const jobTypes  = jobs.map(j => j.jobType)
 
   const result = await query(
     `INSERT INTO dispatch_jobs (
-       run_id, workspace_id, store_id, store_code, asin, pool_id, quantity, delay_seconds, status, created_at, updated_at
+       run_id, workspace_id, store_id, store_code, asin, pool_id, job_type, quantity, delay_seconds, status, created_at, updated_at
      )
      SELECT
        $1::bigint,
@@ -102,14 +104,18 @@ export async function createDispatchJobsBulk(
        $4::text,
        u.asin,
        u.pool_id,
+       u.job_type,
        u.quantity,
        u.delay_seconds,
        'pending'::dispatch_job_status,
        NOW(),
        NOW()
-     FROM UNNEST($5::text[], $6::bigint[], $7::int[], $8::int[]) AS u(asin, pool_id, quantity, delay_seconds)
-     ON CONFLICT DO NOTHING`,
-    [runId, workspaceId, storeId, storeCode, asins, poolIds, quantities, delays]
+     FROM UNNEST($5::text[], $6::bigint[], $7::text[], $8::int[], $9::int[]) AS u(asin, pool_id, job_type, quantity, delay_seconds)
+     ON CONFLICT (workspace_id, asin)
+     WHERE status IN ('pending','claimed','extract_running','extract_done',
+                      'ai_running','ai_done','listing_running','retry_waiting')
+     DO NOTHING`,
+    [runId, workspaceId, storeId, storeCode, asins, poolIds, jobTypes, quantities, delays]
   )
 
   return result.rowCount ?? 0
@@ -169,7 +175,7 @@ export async function claimNextJob(
            updated_at = NOW()
        WHERE id = $1
        RETURNING
-         id, run_id, workspace_id, store_id, store_code, asin, pool_id, status,
+         id, run_id, workspace_id, store_id, store_code, asin, pool_id, job_type, status,
          quantity, delay_seconds, attempt_count, max_attempts, last_error, failed_stage,
          worker_id, claimed_at::text, started_at::text, completed_at::text,
          next_retry_at::text, created_at::text, updated_at::text`,
@@ -190,13 +196,16 @@ export async function reportJobProgress(
   jobId: number,
   status: DispatchJobRow["status"],
   error?: string,
-  failedStage?: NonNullable<DispatchJobRow["failed_stage"]>
+  failedStage?: NonNullable<DispatchJobRow["failed_stage"]>,
+  permanent?: boolean
 ): Promise<DispatchJobRow | null> {
+  // permanent=true → retry_waiting atlanır, direkt failed yazılır, next_retry_at NULL kalır
   const result = await query<DispatchJobRow>(
     `UPDATE dispatch_jobs j
      SET
        status = CASE
          WHEN $2::dispatch_job_status = 'failed'
+           AND NOT ($5::boolean)
            AND (j.attempt_count + 1) < j.max_attempts
          THEN 'retry_waiting'::dispatch_job_status
          ELSE $2::dispatch_job_status
@@ -214,7 +223,9 @@ export async function reportJobProgress(
          ELSE j.attempt_count
        END,
        next_retry_at = CASE
-         WHEN $2::dispatch_job_status = 'failed' AND (j.attempt_count + 1) < j.max_attempts
+         WHEN $2::dispatch_job_status = 'failed'
+           AND NOT ($5::boolean)
+           AND (j.attempt_count + 1) < j.max_attempts
          THEN NOW() + interval '2 minutes'
          ELSE NULL
        END,
@@ -225,11 +236,11 @@ export async function reportJobProgress(
        updated_at = NOW()
      WHERE j.id = $1
      RETURNING
-       j.id, j.run_id, j.workspace_id, j.store_id, j.store_code, j.asin, j.pool_id, j.status,
+       j.id, j.run_id, j.workspace_id, j.store_id, j.store_code, j.asin, j.pool_id, j.job_type, j.status,
        j.quantity, j.delay_seconds, j.attempt_count, j.max_attempts, j.last_error, j.failed_stage,
        j.worker_id, j.claimed_at::text, j.started_at::text, j.completed_at::text, j.next_retry_at::text,
        j.created_at::text, j.updated_at::text`,
-    [jobId, status, error ?? null, failedStage ?? null]
+    [jobId, status, error ?? null, failedStage ?? null, permanent ?? false]
   )
 
   return result.rows[0] ?? null
@@ -342,7 +353,7 @@ export async function getRunStatus(workspaceId: string, runId: number): Promise<
 
   const jobsRes = await query<DispatchJobRow>(
     `SELECT
-       id, run_id, workspace_id, store_id, store_code, asin, pool_id, status,
+       id, run_id, workspace_id, store_id, store_code, asin, pool_id, job_type, status,
        quantity, delay_seconds, attempt_count, max_attempts, last_error, failed_stage,
        worker_id, claimed_at::text, started_at::text, completed_at::text, next_retry_at::text,
        created_at::text, updated_at::text

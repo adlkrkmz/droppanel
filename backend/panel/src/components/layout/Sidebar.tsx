@@ -5,14 +5,9 @@ import { usePathname } from "next/navigation"
 
 const NAV = [
   { href: "/scan",      label: "Scan",        icon: "▪" },
-  { href: "/import",    label: "Import",      icon: "▪" },
-  { href: "/dashboard", label: "Dashboard",  icon: "▪" },
-  { href: "/queue",     label: "Queue",       icon: "▪" },
-  { href: "/history",   label: "History",     icon: "▪" },
-  { href: "/settings",  label: "Settings",    icon: "▪" },
-  { href: "/monitor",   label: "Monitor",     icon: "▪" },
   { href: "/pool",      label: "Pool",        icon: "▪" },
-  { href: "/dispatch",  label: "Dispatch",    icon: "▪" },
+  { href: "/monitor",   label: "Monitor",     icon: "▪" },
+  { href: "/settings",  label: "Settings",    icon: "▪" },
 ]
 
 export default function Sidebar() {

@@ -615,6 +615,66 @@ export class EbayApiClient {
     }
   }
 
+  /**
+   * Zorunlu item aspects + taxonomy’deki izin verilen değer örnekleri (publish öncesi doldurma).
+   * simulationMode bile olsa Taxonomy çağrısı denenir (test yolu).
+   */
+  async getRequiredAspectsForCategory(
+    categoryId: string
+  ): Promise<Array<{ name: string; required: boolean; values: string[] }>> {
+    const id = categoryId.trim()
+    if (!id) return []
+
+    type AspectVal = { localizedValue?: string }
+    type AspectRow = {
+      localizedAspectName?: string
+      aspectConstraint?: { aspectRequired?: boolean }
+      aspectValues?: AspectVal[]
+    }
+
+    const url =
+      `${this.baseUrl}/commerce/taxonomy/v1/category_tree/${EBAY_US_CATEGORY_TREE_ID}` +
+      `/get_item_aspects_for_category?category_id=${encodeURIComponent(id)}`
+
+    try {
+      const response = await fetch(url, {
+        method:  "GET",
+        headers: {
+          Authorization:     `Bearer ${this.oauthToken}`,
+          Accept:            "application/json",
+          "Accept-Language": "en-US",
+        },
+      })
+
+      if (!response.ok) {
+        console.warn(`[EbayAPI] getRequiredAspects failed: ${response.status}`)
+        return []
+      }
+
+      const data = (await response.json()) as { aspects?: AspectRow[] }
+      const aspects = Array.isArray(data.aspects) ? data.aspects : []
+
+      return aspects
+        .filter((a) => a.aspectConstraint?.aspectRequired === true)
+        .map((a) => {
+          const name =
+            typeof a.localizedAspectName === "string" ? a.localizedAspectName.trim() : ""
+          const values = (Array.isArray(a.aspectValues) ? a.aspectValues : [])
+            .map((v) => (typeof v?.localizedValue === "string" ? v.localizedValue.trim() : ""))
+            .filter((v) => v.length > 0)
+            .slice(0, 20)
+          return { name, required: true as const, values }
+        })
+        .filter((a) => a.name.length > 0)
+    } catch (e) {
+      console.warn(
+        `[EbayAPI] getRequiredAspects error:`,
+        e instanceof Error ? e.message : e
+      )
+      return []
+    }
+  }
+
   // ----------------------------------------------------------------
   // POST /sell/inventory/v1/offer
   // ----------------------------------------------------------------

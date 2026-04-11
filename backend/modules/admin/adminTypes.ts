@@ -114,6 +114,7 @@ export type AdminListingRunRequest = {
   quantity:       number
   dryRun?:        boolean
   simulationMode?: boolean
+  poolIds?:       number[]
 }
 
 export type AdminListingRunDispatchSummary = {
@@ -175,6 +176,8 @@ export type AdminDispatchResponse = {
 export type AdminPublishRequest = {
   storeCode: string; delaySeconds: number; limit: number
   dryRun: boolean; simulationMode: boolean
+  quantity?: number
+  poolIds?: number[]
 }
 
 export type AdminPublishItemResult = {

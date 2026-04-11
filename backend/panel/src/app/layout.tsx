@@ -4,6 +4,7 @@ import Sidebar from "@/components/layout/Sidebar"
 import Topbar  from "@/components/layout/Topbar"
 import { StoreProvider } from "@/lib/storeContext"
 import { ToastProvider } from "@/lib/toastContext"
+import NotificationCenter from "@/components/NotificationCenter"
 
 export const metadata: Metadata = {
   title:       "ListPanel",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             >
               {children}
             </main>
+            <NotificationCenter />
           </ToastProvider>
         </StoreProvider>
       </body>

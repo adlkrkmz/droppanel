@@ -14,6 +14,7 @@ import {
   fetchPublishQueueForStore,
   findStoreIdByCode,
   markPoolAsPublishFailed,
+  markPoolAsSkipped,
 } from "./publishQueueRepository"
 import {
   buildEbayListingPayloads,
@@ -28,6 +29,7 @@ import {
   zipPayloadsAndResults,
 } from "../ebay/ebayPublishPersistenceService"
 import { query } from "../../db/client"
+import { addNotification } from "../notifications/notificationService"
 import { getSettingsByStore } from "../storeSettings/storeSettingsRepository"
 import { runPublishGuard } from "../publishGuard/publishGuardService"
 import type { StoreSettingsRow } from "../storeSettings/storeSettingsTypes"
@@ -149,7 +151,9 @@ async function publishOne(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
     await markPoolAsPublishFailed(payload.poolId).catch(() => undefined)
+    await markPoolAsSkipped(payload.poolId).catch(() => undefined)
     return {
       poolId: payload.poolId,
       asin:   payload.asin,
@@ -182,6 +186,19 @@ export async function runTimedPublishForStore(
   const startedAt = new Date().toISOString()
   const t0        = Date.now()
 
+  const notifyListingDone = async (succeeded: number, failed: number) => {
+    try {
+      await addNotification(
+        workspaceId,
+        succeeded > 0 ? "success" : "error",
+        "Listing Tamamlandı",
+        `${succeeded} başarılı, ${failed} başarısız — ${storeCode}`
+      )
+    } catch {
+      /* bildirim ana akışı bozmasın */
+    }
+  }
+
   console.log(
     `[PublishQueue] Starting | store=${storeCode} delay=${delaySeconds}s dryRun=${dryRun}` +
       (targetPoolIds ? ` targetIds=${targetPoolIds.length}` : "")
@@ -201,13 +218,11 @@ export async function runTimedPublishForStore(
   let payloads: EbayListingPayload[]
 
   if (targetPoolIds && targetPoolIds.length > 0) {
-    const fetchLimit = Math.max(targetPoolIds.length * 3, 100)
-    const all        = await buildEbayListingPayloads(workspaceId, fetchLimit)
-    const idSet      = new Set(targetPoolIds)
-    payloads         = all.filter(p => idSet.has(p.poolId))
+    // SQL seviyesinde filtrele — bellek içi filtreleme yerine doğrudan DB'den çek
+    payloads = await buildEbayListingPayloads(workspaceId, targetPoolIds.length * 3, targetPoolIds)
 
     console.log(
-      `[PublishQueue] TargetPoolIds mode: fetched=${all.length} matched=${payloads.length}/${targetPoolIds.length}`
+      `[PublishQueue] TargetPoolIds mode: matched=${payloads.length}/${targetPoolIds.length}`
     )
 
     const matched = new Set(payloads.map(p => p.poolId))
@@ -222,6 +237,7 @@ export async function runTimedPublishForStore(
     console.log(`[PublishQueue] Queue: ${queueEntries.length} entries`)
 
     if (queueEntries.length === 0) {
+      await notifyListingDone(0, 0)
       return {
         storeId:     store.id,
         storeCode:   store.storeCode,
@@ -248,12 +264,14 @@ export async function runTimedPublishForStore(
 
   const quantityOverride =
     typeof quantity === "number" && Number.isInteger(quantity) && quantity >= 1 ? quantity : null
+  console.log(`[PublishQueue] quantityOverride=${quantityOverride} (raw quantity=${quantity})`)
   if (quantityOverride !== null && payloads.length > 0) {
     payloads = payloads.map(p => ({ ...p, quantity: quantityOverride }))
   }
 
   if (payloads.length === 0) {
     console.log(`[PublishQueue] No payloads to process`)
+    await notifyListingDone(0, 0)
     return {
       storeId:     store.id,
       storeCode:   store.storeCode,
@@ -287,7 +305,26 @@ export async function runTimedPublishForStore(
     const payload = payloads[i]
     console.log(`[PublishQueue] [${i + 1}/${payloads.length}] ASIN=${payload.asin} SKU=${payload.sku}`)
 
-    const result = await publishOne(payload, storeSettings, ebayFlowOpts, dryRun)
+    let result: PublishItemResult
+    try {
+      result = await publishOne(payload, storeSettings, ebayFlowOpts, dryRun)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
+      await markPoolAsSkipped(payload.poolId).catch(() => undefined)
+      result = {
+        poolId:        payload.poolId,
+        asin:          payload.asin,
+        sku:           payload.sku,
+        status:        "failed",
+        error:         msg,
+        durationMs:    0,
+        guardScore:    null,
+        guardErrors:   [],
+        guardWarnings: [],
+      }
+    }
+
     items.push(result)
 
     if      (result.status === "success") succeeded++
@@ -307,6 +344,8 @@ export async function runTimedPublishForStore(
   console.log(
     `[PublishQueue] Done | attempted=${payloads.length} succeeded=${succeeded} failed=${failed} blocked=${blocked} skipped=${skipped}`
   )
+
+  await notifyListingDone(succeeded, failed)
 
   return {
     storeId:     store.id,

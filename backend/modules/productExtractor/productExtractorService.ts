@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { query } from "../../db/client"
+import { addNotification } from "../notifications/notificationService"
 import type {
   ProductExtractorRequest,
   ProductExtractorResponse,
@@ -15,7 +16,7 @@ import type {
   ProductExtractorErrorResponse,
 } from "./productExtractorTypes"
 
-const ASIN_REGEX = /^[A-Z0-9]{10}$/
+const ASIN_REGEX = /^([A-Z0-9]{10}|TEMU[0-9]+)$/
 
 function normalizeAsin(asin: string): string {
   return asin.trim().toUpperCase()
@@ -114,6 +115,9 @@ async function upsertCache(
   const attributes = toCacheAttributes(req)
   const images = sanitizeImageUrls(req.images)
   const brand = sanitizeBrand(req.brand ?? "")
+  const source = req.source ?? "amazon"
+  const externalId = req.external_id ?? null
+
   const existed = await query<{ asin_registry_id: number }>(
     `SELECT asin_registry_id FROM amazon_product_cache WHERE asin_registry_id = $1 LIMIT 1`,
     [asinRegistryId]
@@ -128,9 +132,11 @@ async function upsertCache(
        price,
        images,
        attributes,
+       source,
+       external_id,
        updated_at
      )
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW())
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, NOW())
      ON CONFLICT (asin_registry_id)
      DO UPDATE SET
        title = EXCLUDED.title,
@@ -138,6 +144,8 @@ async function upsertCache(
        price = EXCLUDED.price,
        images = EXCLUDED.images,
        attributes = EXCLUDED.attributes,
+       source = EXCLUDED.source,
+       external_id = EXCLUDED.external_id,
        updated_at = NOW()`,
     [
       asinRegistryId,
@@ -146,6 +154,8 @@ async function upsertCache(
       req.price ?? 0,
       JSON.stringify(images),
       JSON.stringify(attributes),
+      source,
+      externalId,
     ]
   )
   return !wasExisting
@@ -173,7 +183,14 @@ async function insertPoolAfterScrape(
        NULL, 0,
        NOW(), NOW()
      )
-     ON CONFLICT (workspace_id, asin_registry_id) DO NOTHING`,
+     ON CONFLICT (workspace_id, asin_registry_id) DO UPDATE SET
+       scrape_status  = 'success',
+       pipeline_stage = CASE
+         WHEN asin_pool.pipeline_stage IN ('imported', 'validated')
+         THEN 'scraped'
+         ELSE asin_pool.pipeline_stage
+       END,
+       updated_at = NOW()`,
     [workspaceId, asinRegistryId]
   )
 }
@@ -186,6 +203,7 @@ export async function extractAndSaveProduct(
   workspaceId: string,
   req:         ProductExtractorRequest
 ): Promise<ProductExtractorResponse> {
+  console.log(`[ProductExtractor] Received: asin=${req.asin} price=${req.price} title="${(req.title ?? '').slice(0, 50)}" images=${Array.isArray(req.images) ? req.images.length : 0}`)
   const asin = normalizeAsin(req.asin ?? "")
   if (!asin) {
     const err: ProductExtractorErrorResponse = { success: false, error: "asin is required" }
@@ -194,7 +212,7 @@ export async function extractAndSaveProduct(
   if (!ASIN_REGEX.test(asin)) {
     const err: ProductExtractorErrorResponse = {
       success: false,
-      error:   `Invalid ASIN format: ${asin}. Must be 10 alphanumeric characters.`,
+      error:   `Invalid ASIN format: ${asin}. Must be 10 alphanumeric characters or a Temu ASIN (TEMU + numeric ID).`,
     }
     return err
   }
@@ -221,6 +239,16 @@ export async function extractAndSaveProduct(
       asin,
       asinRegistryId,
       cacheCreated,
+    }
+    try {
+      await addNotification(
+        workspaceId,
+        "success",
+        "Ürün Kaydedildi",
+        `${asin} amazon_product_cache'e yazıldı`
+      )
+    } catch {
+      /* bildirim ana akışı bozmasın */
     }
     return success
   } catch (e) {

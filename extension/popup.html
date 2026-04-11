@@ -104,6 +104,16 @@
       <div class="row">
         <button id="btnCaptureDirect" type="button">Capture → Direct List</button>
       </div>
+
+      <label for="temuPrice" style="font-size:12px;font-weight:700;margin-top:10px;display:block;">Temu Fiyatı (USD)</label>
+      <input id="temuPrice" type="number" min="0.01" step="0.01" placeholder="örn. 4.83" />
+      <div id="temuPriceError" style="color:#dc2626;font-size:11px;display:none;margin-top:4px;">❌ Fiyat girilmesi zorunludur</div>
+
+      <div class="row">
+        <button id="btnCaptureDirectTemu" type="button" style="background:#ff6600;">
+          Temu → Direct List
+        </button>
+      </div>
     </div>
 
     <div id="message"></div>

@@ -547,6 +547,19 @@ export async function runInventoryFlow(
       height: payload.itemSpecifics["Item Height"],
     }))
 
+    if (payload.asin?.startsWith('TEMU')) {
+      if (!payload.itemSpecifics['Item Width'])  payload.itemSpecifics['Item Width']  = 'Does Not Apply'
+      if (!payload.itemSpecifics['Item Length']) payload.itemSpecifics['Item Length'] = 'Does Not Apply'
+      if (!payload.itemSpecifics['Item Height']) payload.itemSpecifics['Item Height'] = 'Does Not Apply'
+      if (!payload.itemSpecifics['Size'])        payload.itemSpecifics['Size']        = 'One Size'
+      if (!payload.itemSpecifics['Color'])       payload.itemSpecifics['Color']       = 'Multicolor'
+      if (!payload.itemSpecifics['Material'])    payload.itemSpecifics['Material']    = 'Mixed Materials'
+      if (!payload.itemSpecifics['Style'])       payload.itemSpecifics['Style']       = 'Modern'
+      if (!payload.itemSpecifics['Pattern'])     payload.itemSpecifics['Pattern']     = 'Solid'
+      if (!payload.itemSpecifics['Theme'])       payload.itemSpecifics['Theme']       = 'General'
+      if (!payload.itemSpecifics['Type'])        payload.itemSpecifics['Type']        = 'Does Not Apply'
+    }
+
     // Item Diameter -> Item Length/Width olarak kullan
     const diameter = payload.itemSpecifics?.["Item Diameter"]
     if (diameter && !payload.itemSpecifics["Item Length"]) {
@@ -557,7 +570,59 @@ export async function runInventoryFlow(
       }
     }
 
+    // Dims eklendi, şimdi 45'e kırp
+    const itemSpecifics = payload.itemSpecifics
+    const allEntries = Object.entries(itemSpecifics)
+    if (allEntries.length > 45) {
+      const priority = [
+        'Brand', 'Color', 'Material', 'Size', 'Type', 'Style',
+        'MPN', 'UPC', 'EAN', 'Condition', 'Shipping',
+        'Item Length', 'Item Width', 'Item Height', 'Item Weight',
+        'Model Number', 'Special Feature', 'Number of Items',
+        'Included Components', 'Required Assembly', 'Room Type',
+        'Mounting Type', 'Finish Type', 'Material Type'
+      ]
+      const kept: Record<string, string> = {}
+      for (const k of priority) {
+        if (itemSpecifics[k] !== undefined) kept[k] = itemSpecifics[k]
+      }
+      for (const [k, v] of allEntries) {
+        if (Object.keys(kept).length >= 45) break
+        if (kept[k] === undefined) kept[k] = v
+      }
+      Object.keys(itemSpecifics).forEach(k => delete itemSpecifics[k])
+      Object.assign(itemSpecifics, kept)
+    }
+
     const aspects = buildProductAspects(payload)
+
+    try {
+      const requiredAspects = await client.getRequiredAspectsForCategory(categoryId)
+      if (requiredAspects.length > 0) {
+        console.log(`[InventoryFlow] Required aspects from eBay: ${requiredAspects.map(a => a.name).join(", ")}`)
+
+        for (const ra of requiredAspects) {
+          const existing = aspects[ra.name]
+          if (
+            !existing ||
+            existing.length === 0 ||
+            existing[0] === "Does Not Apply" ||
+            existing[0] === "Does not apply"
+          ) {
+            const fallbackValue = ra.values[0] || "Does Not Apply"
+            aspects[ra.name] = [fallbackValue]
+            console.log(`[InventoryFlow] Required aspect filled: ${ra.name} = ${fallbackValue}`)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(
+        `[InventoryFlow] Required aspects check failed:`,
+        e instanceof Error ? e.message : e
+      )
+    }
+
+    console.log(`[InventoryFlow] Final aspects Brand=${JSON.stringify(aspects["Brand"])} keys=${Object.keys(aspects).length}`)
 
     const inventoryBody: EbayInventoryItemRequest = {
       availability: {

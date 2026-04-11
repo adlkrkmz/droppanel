@@ -15,22 +15,23 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { query } from "../../db/client"
+import { addNotification } from "../notifications/notificationService"
 import type { AiListingInput, AiListingOutput } from "./aiListingTypes"
 
 const TITLE_MODEL = "gemini-2.5-flash-lite"
-const TITLE_MIN = 65
-const TITLE_MAX = 75
+const TITLE_MIN = 75
+const TITLE_MAX = 80
 
 const TITLE_SYSTEM_INSTRUCTION =
   "You are an eBay SEO title expert. Return ONLY a JSON object with one field: ebayTitle.\n" +
   "RULES:\n" +
-  "1. Length: 65-75 characters mandatory. Never below 65, never above 75.\n" +
+  "1. Length: 75-80 characters mandatory. Never below 75, never above 80.\n" +
   "2. Structure: [Quantity/Size] [Product Name] [Feature/Benefit keywords]\n" +
   "3. Abbreviations: 2PC, 4PC for pieces. 5in, 10ft, 3oz for measurements.\n" +
   "4. NO brand names. NO Amazon. NO Prime. NO special characters (!,@,#).\n" +
   "5. Quantity: ONLY include quantity (2PC, 4PC) if product contains multiple items. Single items (1PC, 1PCS) must NEVER be written.\n" +
-  "6. Fill to 65-75 chars using high-search keywords from bullets and specs.\n" +
-  "Spaces count as characters. Total must be 65-75 characters including spaces.\n" +
+  "6. Fill to 75-80 chars using high-search keywords from bullets and specs.\n" +
+  "Spaces count as characters. Total must be 75-80 characters including spaces.\n" +
   "NEVER invent measurements (inches, cm, etc.) not present in the Amazon data.\n" +
   "7. English only."
 
@@ -174,6 +175,74 @@ function buildTitlePrompt(input: AiListingInput): string {
   ].join("\n")
 }
 
+async function generateTemuItemSpecifics(title: string, bullets: string[]): Promise<Record<string, string>> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey || apiKey.trim() === "") return {}
+
+  const prompt = [
+    "You are an eBay item specifics expert.",
+    "Given this product title, infer 5 basic item specifics for an eBay listing.",
+    "Return ONLY a JSON object with these fields: Color, Material, Size, Style, Features.",
+    "Rules:",
+    "- Infer from the title context. Example: 'pillow' → Material: 'Polyester', 'organizer' → Material: 'Fabric/Nylon'.",
+    "- Color: if obvious from title use it, otherwise 'Multicolor'.",
+    "- Size: if dimensions in title use them, otherwise 'One Size'.",
+    "- Features: 2-3 key selling points from the title, max 65 chars.",
+    "- Style: infer from product type (e.g. 'Modern', 'Classic', 'Minimalist').",
+    "- Keep all values under 65 characters.",
+    "- Do NOT use 'Does Not Apply' — always make a reasonable inference.",
+    "",
+    "Title: " + title,
+    "Bullets: " + JSON.stringify(bullets),
+  ].join("\n")
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: TITLE_MODEL,
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 256,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            Color: { type: "string" },
+            Material: { type: "string" },
+            Size: { type: "string" },
+            Style: { type: "string" },
+            Features: { type: "string" },
+          },
+          required: ["Color", "Material", "Size", "Style", "Features"],
+        },
+      } as Record<string, unknown>,
+    })
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    })
+    const response = result.response
+    if (!response) return {}
+    const text = response.text()
+    if (!text || text.trim() === "") return {}
+
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const specs: Record<string, string> = {}
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === "string" && v.trim().length > 0) {
+        specs[k] = v.trim().slice(0, 65)
+      }
+    }
+    console.log("[AI] Temu specs generated:", JSON.stringify(specs))
+    return specs
+  } catch (e) {
+    console.warn("[AI] generateTemuItemSpecifics failed:", e instanceof Error ? e.message : e)
+    return {}
+  }
+}
+
 export async function generateEbayTitle(input: AiListingInput): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey || apiKey.trim() === "") {
@@ -282,6 +351,87 @@ export async function selectBestCategory(
   }
 }
 
+export async function fillMissingRequiredAspects(
+  title: string,
+  existingAspects: Record<string, string[]>,
+  requiredAspects: Array<{ name: string; values: string[] }>
+): Promise<Record<string, string[]>> {
+  const missing = requiredAspects.filter(ra => {
+    const existing = existingAspects[ra.name]
+    return !existing || existing.length === 0 || existing[0] === "Does Not Apply"
+  })
+
+  if (missing.length === 0) return existingAspects
+
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey || apiKey.trim() === "") {
+    const filled = { ...existingAspects }
+    for (const m of missing) {
+      filled[m.name] = [m.values[0] ?? "Does Not Apply"]
+    }
+    return filled
+  }
+
+  const prompt = [
+    "You are an eBay item specifics expert.",
+    "Given this product title and a list of missing required item specifics with their allowed values,",
+    "select the most appropriate value for each missing spec.",
+    "Return ONLY a JSON object where keys are spec names and values are the selected value string.",
+    "",
+    "Product Title: " + title,
+    "",
+    "Missing required specs:",
+    ...missing.map(m => `- ${m.name}: allowed values = [${m.values.slice(0, 15).join(", ")}]`),
+    "",
+    "Rules:",
+    "- Pick the most likely value based on the product title.",
+    "- If no value fits, use the first allowed value or 'Does Not Apply'.",
+    "- Keep values exactly as listed in allowed values when possible.",
+  ].join("\n")
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: TITLE_MODEL,
+      generationConfig: {
+        temperature:     0.1,
+        maxOutputTokens: 256,
+        responseMimeType: "application/json",
+      } as Record<string, unknown>,
+    })
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    })
+    const response = result.response
+    const text = response?.text()
+    if (!text) throw new Error("empty response")
+
+    const parsed = JSON.parse(text) as Record<string, string>
+    const filled = { ...existingAspects }
+
+    for (const m of missing) {
+      const aiValue = parsed[m.name]
+      if (aiValue && typeof aiValue === "string" && aiValue.trim().length > 0) {
+        filled[m.name] = [aiValue.trim().slice(0, 65)]
+        console.log(`[AI] Required aspect filled: ${m.name} = ${aiValue}`)
+      } else {
+        filled[m.name] = [m.values[0] ?? "Does Not Apply"]
+        console.log(`[AI] Required aspect fallback: ${m.name} = ${filled[m.name][0]}`)
+      }
+    }
+
+    return filled
+  } catch (e) {
+    console.warn("[AI] fillMissingRequiredAspects failed:", e instanceof Error ? e.message : e)
+    const filled = { ...existingAspects }
+    for (const m of missing) {
+      filled[m.name] = [m.values[0] ?? "Does Not Apply"]
+    }
+    return filled
+  }
+}
+
 const POLICY_IMAGE_URL = "https://img.listjetgo.com/1.png"
 const EBAY_DESC_LIMIT  = 4000
 
@@ -370,7 +520,23 @@ export async function generateAiListing(input: AiListingInput): Promise<AiListin
   const ebayTitle = await generateEbayTitle(input)
   const bullets = cleanBulletsForOutput(input)
   const description = buildDescription(input, ebayTitle)
-  const itemSpecifics = buildItemSpecifics(input)
+  let itemSpecifics = buildItemSpecifics(input)
+
+  // Temu ürünleri için AI'dan item specifics üret (generateAndCacheAiListing cache'den önce bu çıktıyı kullanır)
+  const isTemu = input.asin?.startsWith("TEMU")
+  if (isTemu) {
+    const temuSpecs = await generateTemuItemSpecifics(ebayTitle, input.bullets ?? [])
+    for (const [k, v] of Object.entries(temuSpecs)) {
+      if (
+        !itemSpecifics[k] ||
+        itemSpecifics[k] === "Does not apply" ||
+        itemSpecifics[k] === "Does Not Apply" ||
+        itemSpecifics[k] === ""
+      ) {
+        itemSpecifics[k] = v
+      }
+    }
+  }
 
   return {
     ebayTitle,
@@ -418,6 +584,17 @@ export async function generateAndCacheAiListing(
      WHERE workspace_id = $1 AND asin_registry_id = $2`,
     [workspaceId, asinRegistryId]
   )
+
+  try {
+    await addNotification(
+      workspaceId,
+      "success",
+      "AI Listing Hazır",
+      `${input.asin} için AI listing oluşturuldu`
+    )
+  } catch {
+    /* bildirim ana akışı bozmasın */
+  }
 
   return output
 }

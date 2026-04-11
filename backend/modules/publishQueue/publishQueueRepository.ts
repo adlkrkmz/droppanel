@@ -110,3 +110,14 @@ export async function markPoolAsPublishFailed(poolId: number): Promise<void> {
     [poolId]
   )
 }
+
+export async function markPoolAsSkipped(poolId: number): Promise<void> {
+  await query(
+    `UPDATE asin_pool
+     SET status         = 'skipped',
+         listing_status = 'failed',
+         updated_at     = NOW()
+     WHERE id = $1`,
+    [poolId]
+  )
+}

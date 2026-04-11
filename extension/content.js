@@ -378,6 +378,126 @@
       sendResponse(result);
       return true;
     }
+
+    if (request.type === 'CAPTURE_TEMU') {
+      if (!location.href.includes('temu.com')) {
+        sendResponse({ ok: false, error: 'Temu sayfasında değilsiniz' })
+        return true
+      }
+      try {
+        // Başlık
+        let title = ''
+        for (const s of ['h1', '[data-testid="goods-title"]', '.goods-title']) {
+          const el = document.querySelector(s)
+          if (el) { title = (el.textContent || '').replace(/\s+/g, ' ').trim(); break }
+        }
+        if (!title) throw new Error('Başlık bulunamadı')
+
+        // Görsel toplama — DOM: kwcdn.com/product/ img, goods-img-external / recommend hariç; yedek top_gallery_url
+        const seen = new Set()
+        const images = []
+
+        const allImgs = document.querySelectorAll('img[src*="kwcdn.com/product/"]')
+        for (let i = 0; i < allImgs.length; i++) {
+          const img = allImgs[i]
+          if (images.length >= 8) break
+          const src = img.src
+          if (!src) continue
+
+          const parentClasses =
+            String(img.parentElement && img.parentElement.className ? img.parentElement.className : '') +
+            ' ' +
+            String(img.parentElement && img.parentElement.parentElement && img.parentElement.parentElement.className
+              ? img.parentElement.parentElement.className
+              : '')
+          if (parentClasses.includes('goods-img-external')) continue
+          if (parentClasses.includes('recommend')) continue
+          if (parentClasses.includes('_2F5wHDYz')) continue
+
+          let clean = src.split('?')[0]
+          const lower = clean.toLowerCase()
+
+          if (lower.includes('avatar') || lower.includes('review') || lower.includes('seller')) continue
+          if (lower.includes('upload_aimg') || lower.includes('commimg') || lower.includes('openingemail')) continue
+
+          if (seen.has(lower)) continue
+          seen.add(lower)
+          images.push(clean)
+        }
+
+        if (images.length === 0) {
+          try {
+            const topUrl = new URL(window.location.href).searchParams.get('top_gallery_url')
+            if (topUrl) {
+              const dec = decodeURIComponent(topUrl).split('?')[0]
+              images.push(dec)
+            }
+          } catch (e) {}
+        }
+
+        if (!images.length) throw new Error('Görsel bulunamadı')
+
+        // Fiyat
+        const bodyText = document.body.innerText || ''
+        const priceMatches = bodyText.match(/\$\s?\d+(?:[.,]\d{1,2})?/g)
+        let price = 0
+        if (priceMatches) {
+          const nums = priceMatches.map(v => parseFloat(v.replace('$','').replace(',','.').trim())).filter(n => Number.isFinite(n) && n >= 0.5)
+          if (nums.length) price = Math.min(...nums)
+        }
+        if (!price) throw new Error('Fiyat bulunamadı')
+
+        // Ürün ID
+        let goodsId = null
+        try { goodsId = new URL(window.location.href).searchParams.get('goods_id') } catch(e) {}
+        if (!goodsId) {
+          const m = window.location.href.match(/goods_id[=_](\d+)/) || window.location.href.match(/-(\d{10,})[.?]/)
+          goodsId = m ? m[1] : null
+        }
+        if (!goodsId) throw new Error('Ürün ID bulunamadı')
+
+        // Reviews
+        let reviews = 0
+        document.querySelectorAll('*').forEach(el => {
+          if (!reviews && el.children.length === 0) {
+            const m = el.textContent?.match(/^(\d+)\s+reviews?$/)
+            if (m) reviews = parseInt(m[1])
+          }
+        })
+
+        // Rating
+        let rating = 0
+        const ratingM = bodyText.match(/Excellent\s+(\d+\.\d+)/i) || bodyText.match(/(\d+\.\d+)\s*★/i)
+        if (ratingM) rating = parseFloat(ratingM[1])
+
+        sendResponse({
+          ok: true,
+          data: {
+            asin: 'TEMU' + goodsId,
+            external_id: goodsId,
+            source: 'temu',
+            title,
+            brand: '',
+            price,
+            currency: 'USD',
+            images,
+            bullets: [],
+            description: '',
+            specs: {},
+            rating,
+            reviews,
+            bsr: null,
+            category: '',
+            isPrime: false,
+            isFreeShipping: true
+          }
+        })
+      } catch(e) {
+        sendResponse({ ok: false, error: e.message })
+      }
+      return true
+    }
+
     return false;
   });
 })();

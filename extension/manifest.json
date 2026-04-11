@@ -6,6 +6,7 @@
   "permissions": ["tabs", "storage", "scripting", "alarms", "activeTab"],
   "host_permissions": [
     "https://www.amazon.com/*",
+    "https://www.temu.com/*",
     "http://localhost:4000/*",
     "http://localhost:3000/*"
   ],
@@ -14,7 +15,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.amazon.com/dp/*", "https://www.amazon.com/*/dp/*", "https://www.amazon.com/gp/product/*"],
+      "matches": ["https://www.amazon.com/dp/*", "https://www.amazon.com/*/dp/*", "https://www.amazon.com/gp/product/*", "https://www.temu.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     },

@@ -12,10 +12,12 @@ import {
   handleGetEbayConnectUrl, handleGetEbayCallback, handleGetEbayAccountStatus, handleGetEbayAccounts, handlePostEbayRefresh, handleGetMonitorListings, handlePostMonitorUpdatePrice, handlePostMonitorUpdateStock, handlePostMonitorBlind, handlePostAsinImport, handlePostProductExtract, handlePostAiListingGenerate, handlePostDispatch, handlePostPublishRun,
   handlePostCreateStore, handlePostEbayDisconnect, handlePostDispatchJobsCleanupStale,
   handleGetSettings, handlePostSettingsAddress, handleGetSettingsPolicies, handlePostSettingsPolicies, handlePostSettingsMarkup,
+  handleGetNotifications, handlePostNotificationsRead, handlePostNotificationsReadAll,
 } from "../admin/adminRoutes"
 import { handleCallback as ebayHandleCallback } from "../ebayOAuth/ebayOAuthService"
 import type { RouteDefinition, ServerConfig } from "./httpTypes"
 import type { AdminRequest }                  from "../admin/adminTypes"
+import { cleanupOld as cleanupOldNotifications } from "../notifications/notificationService"
 
 function adapt(handler: (req: AdminRequest) => Promise<{ status: number; body: unknown }>) {
   return async (req: express.Request, res: express.Response): Promise<void> => {
@@ -57,6 +59,9 @@ const routes: RouteDefinition[] = [
   { method: "get",  path: "/admin/queue",                  handler: adapt(handleGetQueue)         },
   { method: "get",  path: "/admin/history",                handler: adapt(handleGetHistory)       },
   { method: "get",  path: "/admin/stores",                 handler: adapt(handleGetStores)        },
+  { method: "get",  path: "/admin/notifications",          handler: adapt(handleGetNotifications) },
+  { method: "post", path: "/admin/notifications/read",     handler: adapt(handlePostNotificationsRead) },
+  { method: "post", path: "/admin/notifications/read-all", handler: adapt(handlePostNotificationsReadAll) },
   { method: "post", path: "/admin/stores/create",        handler: adapt(handlePostCreateStore) },
   { method: "get",  path: "/admin/pool",                   handler: adapt(handleGetPoolWithLog) },
   { method: "post", path: "/admin/pool/dispatch-selected", handler: adapt(handlePostPoolDispatch) },
@@ -129,6 +134,8 @@ export function buildApp(config: ServerConfig): express.Application {
 export function startServer(config: ServerConfig): void {
   const app = buildApp(config)
   app.listen(config.port, () => {
+    const wid = process.env.WORKSPACE_ID ?? ""
+    if (wid) void cleanupOldNotifications(wid)
     console.log("=".repeat(60))
     console.log(`  HTTP Server - port ${config.port}`)
     routes.forEach(r => console.log(`  ${r.method.toUpperCase().padEnd(5)} ${r.path}`))

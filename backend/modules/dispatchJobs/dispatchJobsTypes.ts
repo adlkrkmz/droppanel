@@ -42,6 +42,11 @@ export type DispatchRun = {
   updatedAt: string
 }
 
+export type DispatchJobType =
+  | "scrape_and_list"  // validated — worker: scrape + AI + done
+  | "ai_and_list"      // scraped   — worker: sadece AI + done
+  | "list_only"        // ai_generated — worker: direkt done (listing panel yapar)
+
 export type DispatchJob = {
   id: number
   runId: number
@@ -50,6 +55,7 @@ export type DispatchJob = {
   storeCode: string
   asin: string
   poolId: number | null
+  jobType: DispatchJobType
   status: DispatchJobStatus
   quantity: number
   delaySeconds: number

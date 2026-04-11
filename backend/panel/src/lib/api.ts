@@ -141,19 +141,37 @@ export async function deletePoolItems(poolIds: number[]): Promise<{ deleted: num
   return apiFetch<{ deleted: number }>("/admin/pool", { method: "DELETE", body: JSON.stringify({ poolIds }) })
 }
 
-export async function createDispatchRun(params: {
-  storeCode: string
-  poolIds: number[]
-  quantity: number
-  delaySeconds: number
-}): Promise<any> {
-  return apiFetch<any>("/admin/dispatch-runs/create", { method: "POST", body: JSON.stringify(params) })
-}
-
 export async function getActiveRuns(): Promise<any> {
   return apiFetch<any>("/admin/dispatch-runs/active")
 }
 
 export async function getRunStatus(runId: number): Promise<any> {
   return apiFetch<any>(`/admin/dispatch-runs/status?runId=${runId}`)
+}
+
+export type PersistedNotificationRow = {
+  id: number
+  type: string
+  title: string
+  message: string
+  read: boolean
+  createdAt: string
+}
+
+export async function getNotifications(limit = 50): Promise<{ rows: PersistedNotificationRow[] }> {
+  return apiFetch<{ rows: PersistedNotificationRow[] }>(`/admin/notifications?limit=${limit}`)
+}
+
+export async function markNotificationsRead(ids: number[]): Promise<{ updated: number }> {
+  return apiFetch<{ updated: number }>("/admin/notifications/read", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  })
+}
+
+export async function markAllNotificationsRead(): Promise<{ updated: number }> {
+  return apiFetch<{ updated: number }>("/admin/notifications/read-all", {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
 }

@@ -65,6 +65,11 @@ import type {
 } from "../settings/settingsService"
 import type { StoreAddress } from "../storeSettings/storeSettingsTypes"
 import { query } from "../../db/client"
+import {
+  getNotifications as fetchPersistedNotifications,
+  markAsRead as markNotificationsAsRead,
+  markAllAsRead as markAllNotificationsAsRead,
+} from "../notifications/notificationService"
 
 function getWorkspaceId(): string {
   const id = process.env.WORKSPACE_ID
@@ -160,12 +165,15 @@ export async function handlePostCreateStore(req: AdminRequest): Promise<AdminRes
 
 export async function handleGetPool(req: AdminRequest): Promise<AdminResponse<AdminPoolResult>> {
   try {
-    const { stage, status, storeCode, limit } = req.query
+    const { stage, status, storeCode, limit, asin } = req.query
     return {
       status: 200,
       body: await getPoolRows(getWorkspaceId(), {
-        stage: stage || null, status: status || null,
-        storeCode: storeCode || null, limit: limit ? parseInt(limit, 10) : 200,
+        stage: stage || null,
+        status: status || null,
+        storeCode: storeCode || null,
+        asin: asin || null,
+        limit: limit ? parseInt(limit, 10) : undefined,
       }),
     }
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
@@ -217,10 +225,12 @@ export async function handlePostAsinImport(req: AdminRequest): Promise<AdminResp
 
 export async function handlePostProductExtract(req: AdminRequest): Promise<AdminResponse<ProductExtractorResponse>> {
   try {
-    const body = req.body as Partial<ProductExtractorRequest>
-    if (!body.asin) return bad("asin is required")
+    const input = req.body as Partial<ProductExtractorRequest>
+    if (!input.asin) return bad("asin is required")
     const workspaceId = getWorkspaceId()
-    const result = await extractAndSaveProduct(workspaceId, body as ProductExtractorRequest)
+    const source = (input.source as string | undefined) || "amazon"
+    const external_id = (input.external_id as string | null | undefined) ?? null
+    const result = await extractAndSaveProduct(workspaceId, { ...input, source, external_id } as ProductExtractorRequest)
     return { status: 200, body: result }
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
 }
@@ -294,14 +304,28 @@ export async function handlePostListingRun(req: AdminRequest): Promise<AdminResp
     const startedAt      = new Date().toISOString()
     const t0             = Date.now()
 
-    const dispatchResult = await runDispatch({
-      workspaceId,
-      storeCode:     body.storeCode,
-      count:         body.count,
-      selectionMode: body.selectionMode ?? "random",
-      delaySeconds,
-    })
-    console.log(`[ListingRun] Dispatch: selected=${dispatchResult.selectedCount} skipped=${dispatchResult.skippedCount}`)
+    // body.poolIds verilmişse iç dispatch atlanır — dispatch-selected dışarıda zaten yapıldı
+    const directPoolIds = Array.isArray(body.poolIds) && body.poolIds.length > 0
+      ? body.poolIds as number[]
+      : undefined
+
+    let dispatchResult: { selectedCount: number; skippedCount: number; assignedPoolIds: number[]; assignedAsins: string[] } | null = null
+    let targetPoolIds: number[] | undefined
+
+    if (directPoolIds) {
+      targetPoolIds = directPoolIds
+      console.log(`[ListingRun] Direct poolIds mode: ${targetPoolIds.length} item(s)`)
+    } else {
+      dispatchResult = await runDispatch({
+        workspaceId,
+        storeCode:     body.storeCode,
+        count:         body.count,
+        selectionMode: body.selectionMode ?? "random",
+        delaySeconds,
+      })
+      targetPoolIds = dispatchResult.assignedPoolIds
+      console.log(`[ListingRun] Dispatch: selected=${dispatchResult.selectedCount} skipped=${dispatchResult.skippedCount}`)
+    }
 
     const publishResult = await runTimedPublishForStore({
       workspaceId,
@@ -313,7 +337,7 @@ export async function handlePostListingRun(req: AdminRequest): Promise<AdminResp
       quantity,
       ebayOauthToken: process.env.EBAY_OAUTH_TOKEN ?? "SIM_TOKEN",
       ebaySandbox:    (process.env.EBAY_SANDBOX ?? "true") !== "false",
-      targetPoolIds:  dispatchResult.assignedPoolIds,
+      targetPoolIds,
     })
     console.log(`[ListingRun] Publish: attempted=${publishResult.attempted} succeeded=${publishResult.succeeded} blocked=${publishResult.blocked}`)
 
@@ -335,10 +359,10 @@ export async function handlePostListingRun(req: AdminRequest): Promise<AdminResp
         dryRun,
         simulationMode,
         dispatch: {
-          selectedCount:   dispatchResult.selectedCount,
-          skippedCount:    dispatchResult.skippedCount,
-          assignedPoolIds: dispatchResult.assignedPoolIds,
-          assignedAsins:   dispatchResult.assignedAsins,
+          selectedCount:   dispatchResult?.selectedCount   ?? targetPoolIds?.length ?? 0,
+          skippedCount:    dispatchResult?.skippedCount    ?? 0,
+          assignedPoolIds: dispatchResult?.assignedPoolIds ?? targetPoolIds ?? [],
+          assignedAsins:   dispatchResult?.assignedAsins   ?? [],
         },
         publish: {
           attempted:  publishResult.attempted,
@@ -379,17 +403,22 @@ export async function handlePostPublishRun(req: AdminRequest): Promise<AdminResp
   try {
     const body = req.body as Partial<AdminPublishRequest>
     if (!body.storeCode) return bad("storeCode is required")
+    const targetPoolIds = Array.isArray(body.poolIds) && body.poolIds.length > 0
+      ? body.poolIds as number[]
+      : undefined
     return {
       status: 200,
       body: await runTimedPublishForStore({
         workspaceId:    getWorkspaceId(),
         storeCode:      body.storeCode,
         delaySeconds:   body.delaySeconds   ?? 5,
-        limit:          body.limit          ?? 10,
+        limit:          targetPoolIds ? targetPoolIds.length * 3 : (body.limit ?? 10),
         dryRun:         body.dryRun         ?? true,
+        quantity:       body.quantity        ?? 1,
         simulationMode: body.simulationMode ?? true,
         ebayOauthToken: process.env.EBAY_OAUTH_TOKEN ?? "SIM_TOKEN",
         ebaySandbox:    (process.env.EBAY_SANDBOX ?? "true") !== "false",
+        targetPoolIds,
       }) as AdminPublishResponse,
     }
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
@@ -765,6 +794,31 @@ export async function handlePostSettingsPolicies(req: AdminRequest): Promise<Adm
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
 }
 
+export async function handleGetNotifications(req: AdminRequest): Promise<AdminResponse<{ rows: unknown[] }>> {
+  try {
+    const limit = req.query["limit"] ? parseInt(req.query["limit"]!, 10) : 50
+    const rows = await fetchPersistedNotifications(getWorkspaceId(), Number.isFinite(limit) && limit > 0 ? limit : 50)
+    return { status: 200, body: { rows } }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
+export async function handlePostNotificationsRead(req: AdminRequest): Promise<AdminResponse<{ updated: number }>> {
+  try {
+    const body = req.body as { ids?: unknown }
+    const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is number => typeof x === "number" && x > 0) : []
+    if (ids.length === 0) return bad("ids must be a non-empty array of numbers")
+    const updated = await markNotificationsAsRead(getWorkspaceId(), ids)
+    return { status: 200, body: { updated } }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
+export async function handlePostNotificationsReadAll(req: AdminRequest): Promise<AdminResponse<{ updated: number }>> {
+  try {
+    const updated = await markAllNotificationsAsRead(getWorkspaceId())
+    return { status: 200, body: { updated } }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
 export async function handlePostSettingsMarkup(
   req: AdminRequest
 ): Promise<AdminResponse<{ ok: true; markupPercent: number }>> {
@@ -789,11 +843,14 @@ export const adminRouteMap = [
   { method: "GET",  path: "/admin/queue",                  handler: handleGetQueue          },
   { method: "GET",  path: "/admin/history",                handler: handleGetHistory        },
   { method: "GET",  path: "/admin/stores",                 handler: handleGetStores         },
+  { method: "GET",  path: "/admin/notifications",          handler: handleGetNotifications },
+  { method: "POST", path: "/admin/notifications/read",     handler: handlePostNotificationsRead },
+  { method: "POST", path: "/admin/notifications/read-all", handler: handlePostNotificationsReadAll },
   { method: "POST", path: "/admin/stores/create",        handler: handlePostCreateStore },
   { method: "GET",  path: "/admin/pool",                   handler: handleGetPool           },
   { method: "POST", path: "/admin/pool/dispatch-selected", handler: handlePostPoolDispatch  },
   { method: "DELETE", path: "/admin/pool",                handler: handleDeletePoolItems  },
-  { method: "POST", path: "/admin/dispatch-runs/create", handler: handlePostDispatchRunCreate },
+  { method: "POST", path: "/admin/dispatch-runs/create",       handler: handlePostDispatchRunCreate       },
   { method: "POST", path: "/admin/dispatch-jobs/cleanup-stale", handler: handlePostDispatchJobsCleanupStale },
   { method: "POST", path: "/admin/dispatch-jobs/claim-next", handler: handlePostDispatchJobClaimNext },
   { method: "POST", path: "/admin/dispatch-jobs/report",    handler: handlePostDispatchJobReport },

@@ -152,10 +152,11 @@ export async function getPoolRows(
     stage?:     string | null
     status?:    string | null
     storeCode?: string | null
+    asin?:      string | null
     limit?:     number
   }
 ): Promise<AdminPoolResult> {
-  const { stage, status, storeCode, limit = 200 } = filters
+  const { stage, status, storeCode, asin, limit } = filters
 
   const conditions: string[] = ["ap.workspace_id = $1"]
   const params: unknown[]    = [workspaceId]
@@ -164,8 +165,10 @@ export async function getPoolRows(
   if (stage)     { conditions.push(`ap.pipeline_stage = $${idx++}`); params.push(stage)     }
   if (status)    { conditions.push(`ap.status = $${idx++}::pool_status`);         params.push(status)    }
   if (storeCode) { conditions.push(`s.store_code = $${idx++}`);      params.push(storeCode) }
+  if (asin)      { conditions.push(`ar.asin = $${idx++}`);           params.push(asin)      }
 
-  params.push(limit)
+  const limitClause = limit != null ? `LIMIT $${idx++}` : ''
+  if (limit != null) params.push(limit)
 
   console.log('[getPoolRows] params:', JSON.stringify(params))
   console.log('[getPoolRows] conditions:', conditions)
@@ -212,7 +215,7 @@ export async function getPoolRows(
       AND aic.asin_registry_id = ap.asin_registry_id
      WHERE ${conditions.join(" AND ")}
      ORDER BY ap.updated_at DESC
-     LIMIT $${idx}`,
+     ${limitClause}`,
     params
   )
 
@@ -220,7 +223,7 @@ export async function getPoolRows(
   console.log('[getPoolRows] result count:', result.rows.length)
 
   const rows: AdminPoolRow[] = result.rows.map(r => ({
-    poolId:            r.pool_id,
+    poolId:            typeof r.pool_id === "string" ? parseInt(r.pool_id, 10) : r.pool_id,
     asin:              r.asin,
     title:             r.title,
     brand:             r.brand,
@@ -263,13 +266,14 @@ export async function dispatchSelectedPool(
   const store = storeResult.rows[0]
   if (!store) throw new Error(`Active store not found: storeCode="${storeCode}"`)
 
-  // Sadece atanabilir olanları filtrele: status=ready, assigned_store_id IS NULL
+  // ready veya skipped (önceki başarısız yükleme) itemları kabul et
+  // skipped olanları ready'ye döndürüp yeniden ata
   const eligibleResult = await query<{ id: number }>(
     `SELECT id FROM asin_pool
      WHERE workspace_id = $1
        AND id = ANY($2::int[])
-       AND status = 'ready'
-       AND assigned_store_id IS NULL`,
+       AND status IN ('ready', 'skipped')
+       AND pipeline_stage = 'ai_generated'`,
     [workspaceId, poolIds]
   )
 
@@ -280,9 +284,13 @@ export async function dispatchSelectedPool(
     return { selectedCount: 0, skippedCount, assignedPoolIds: [] }
   }
 
+  // status'u ready'ye sıfırla, listing_status'u temizle, store ata
   await query(
     `UPDATE asin_pool
-     SET assigned_store_id = $1, updated_at = NOW()
+     SET assigned_store_id = $1,
+         status            = 'ready',
+         listing_status    = 'pending',
+         updated_at        = NOW()
      WHERE id = ANY($2::int[])`,
     [store.id, eligibleIds]
   )

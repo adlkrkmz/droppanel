@@ -24,7 +24,7 @@ export async function findStoreByCode(
 
 // ─── UYGUN ADAYLAR ────────────────────────────────────────────
 // status='ready', assigned_store_id IS NULL,
-// pipeline_stage='ai_generated', ai_status='success'
+// pipeline_stage IN (validated, scraped, ai_generated)
 
 export async function fetchDispatchCandidates(
   workspaceId: string,
@@ -43,11 +43,13 @@ export async function fetchDispatchCandidates(
        ap.priority
      FROM asin_pool ap
      INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
+     INNER JOIN amazon_product_cache apc
+       ON apc.asin_registry_id = ap.asin_registry_id
+       AND apc.price > 0
      WHERE ap.workspace_id      = $1
        AND ap.status            = 'ready'
        AND ap.assigned_store_id IS NULL
-       AND ap.pipeline_stage    = 'ai_generated'
-       AND ap.ai_status         = 'success'
+       AND ap.pipeline_stage    IN ('validated', 'scraped', 'ai_generated')
      ORDER BY RANDOM()
      LIMIT $2`,
     [workspaceId, limit]

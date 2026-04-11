@@ -1,24 +1,43 @@
 const API_BASE = 'http://localhost:4000'
 let workerBusy = false
 
+// ─── Worker ID — yoksa otomatik oluştur ──────────────────────────────────────
+function ensureWorkerId(callback) {
+  chrome.storage.local.get('droppanel_worker_id', function(r) {
+    if (r.droppanel_worker_id) {
+      callback(r.droppanel_worker_id)
+      return
+    }
+    var newId = 'w-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now()
+    chrome.storage.local.set({ droppanel_worker_id: newId }, function() {
+      console.log('[Worker] Generated worker_id:', newId)
+      callback(newId)
+    })
+  })
+}
+
+// ─── setTimeout polling — alarms yerine daha güvenilir ───────────────────────
+function startPolling() {
+  setTimeout(async function poll() {
+    try { await pollForJob() } catch(e) {
+      console.error('[Worker] poll error:', e && e.message ? e.message : String(e))
+    }
+    setTimeout(poll, 15000) // 15 saniyede bir
+  }, 2000)
+}
+
 chrome.runtime.onInstalled.addListener(function() {
-  console.log('DropPanel extension installed.')
-  // Worker polling devre dışı
-  chrome.alarms.clear('droppanel_poll')
+  console.log('[DropPanel] Extension installed.')
+  ensureWorkerId(function() { startPolling() })
 })
 
 chrome.runtime.onStartup.addListener(function() {
-  // Worker polling devre dışı
-  chrome.alarms.clear('droppanel_poll')
+  ensureWorkerId(function() { startPolling() })
 })
 
-chrome.alarms.onAlarm.addListener(function(alarm) {
-  // droppanel_poll alarmı devre dışı — pollForJob çağrılmıyor
-  if (alarm.name === 'droppanel_poll') {
-    // noop
-  }
-})
+startPolling() // Service worker başladığında hemen başlat
 
+// ─── API helpers ─────────────────────────────────────────────────────────────
 async function apiFetchJson(method, path, body) {
   const res = await fetch(API_BASE + path, {
     method: method,
@@ -60,14 +79,15 @@ function waitForTabLoad(tabId) {
   })
 }
 
+// ─── Worker ──────────────────────────────────────────────────────────────────
 async function reportFailed(job, stage, errorMsg, wId) {
   console.error('[Worker] reportFailed:', stage, errorMsg)
   try {
     await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'failed',
-      error: errorMsg,
+      jobId:       parseInt(job.id, 10),
+      workerId:    wId,
+      status:      'failed',
+      error:       errorMsg,
       failedStage: stage
     })
   } catch(e) {}
@@ -75,12 +95,13 @@ async function reportFailed(job, stage, errorMsg, wId) {
 }
 
 async function pollForJob() {
-  var stored = await new Promise(function(resolve) {
-    chrome.storage.local.get('droppanel_worker_id', function(r) { resolve(r) })
+  var wId = await new Promise(function(resolve) {
+    ensureWorkerId(resolve)
   })
-  var wId = stored.droppanel_worker_id
-  if (!wId) return
-  console.log('[Worker] polling...')
+
+  console.log('[Worker] polling... wId:', wId)
+
+  // Stale iş temizliği — hata kritik değil
   try {
     const controller = new AbortController()
     const timeout = setTimeout(function() { controller.abort() }, 3000)
@@ -94,99 +115,138 @@ async function pollForJob() {
     } finally {
       clearTimeout(timeout)
     }
-  } catch(e) {
-    // cleanup-stale hatası kritik değil, devam et
-  }
+  } catch(e) {}
+
   if (workerBusy) return
+
   try {
     var claimRes = await apiFetchJson('POST', '/admin/dispatch-jobs/claim-next', {
-      workerId: wId,
+      workerId:  wId,
       storeCode: null
     })
     if (!claimRes || !claimRes.job) return
     workerBusy = true
     await processJob(claimRes.job, wId)
   } catch(e) {
-    console.error('[Worker] pollForJob failed:', e && e.message ? e.message : String(e))
+    console.error('[Worker] pollForJob error:', e && e.message ? e.message : String(e))
   }
 }
 
 async function processJob(job, wId) {
-  console.log('[Worker] processing job:', job.id, job.asin)
+  const JOB_TIMEOUT_MS = 60000
+  const jobType = job.jobType || 'scrape_and_list'
+  let openTabId = null
+  let done = false
+
+  console.log('[Worker] Processing job:', job.id, '| ASIN:', job.asin, '| type:', jobType)
+
+  // 60 saniye timeout — donma koruması
+  const timeoutHandle = setTimeout(function() {
+    if (done) return
+    done = true
+    console.error('[Worker] Job timeout (60s):', job.id, job.asin)
+    if (openTabId !== null) {
+      try { chrome.tabs.remove(openTabId) } catch(e) {}
+      openTabId = null
+    }
+    apiFetchJson('POST', '/admin/dispatch-jobs/report', {
+      jobId:       parseInt(job.id, 10),
+      workerId:    wId,
+      status:      'failed',
+      error:       'Timeout (60s)',
+      failedStage: 'extract'
+    }).catch(function() {})
+    workerBusy = false
+  }, JOB_TIMEOUT_MS)
+
   try {
-    await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'extract_running'
-    })
-    var url = 'https://www.amazon.com/dp/' + job.asin
-    console.log('[Worker] creating tab for:', url)
-    var tab = await new Promise(function(resolve, reject) {
-      chrome.tabs.create({ url: url, active: false }, function(t) {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-        } else {
-          resolve(t)
-        }
+
+    // ─── list_only: ai_generated ürün, scrape/AI gerekmez ──────────────────
+    if (jobType === 'list_only') {
+      clearTimeout(timeoutHandle)
+      done = true
+      await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
+        jobId: parseInt(job.id, 10), workerId: wId, status: 'ai_done'
       })
-    })
-    await waitForTabLoad(tab.id)
-    console.log('[Worker] tab loaded')
-    await sleep(1500)
-    var captureRes = await new Promise(function(resolve) {
-      chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE' }, function(response) {
-        resolve(response)
+      await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
+        jobId: parseInt(job.id, 10), workerId: wId, status: 'listing_done'
       })
-    })
-    chrome.tabs.remove(tab.id)
-    if (!captureRes || !captureRes.ok) {
-      await reportFailed(job, 'extract', captureRes ? captureRes.error : 'No response', wId)
+      console.log('[Worker] list_only done:', job.id, '| ASIN:', job.asin)
+      workerBusy = false
       return
     }
-    await apiFetchJson('POST', '/admin/product/extract', captureRes.data)
+
+    // ─── scrape_and_list: validated — Amazon'dan scrape et ─────────────────
+    if (jobType === 'scrape_and_list') {
+      await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
+        jobId: parseInt(job.id, 10), workerId: wId, status: 'extract_running'
+      })
+
+      var url = 'https://www.amazon.com/dp/' + job.asin
+      var tab = await new Promise(function(resolve, reject) {
+        chrome.tabs.create({ url: url, active: false }, function(t) {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
+          else resolve(t)
+        })
+      })
+      openTabId = tab.id
+
+      await waitForTabLoad(tab.id)
+      await sleep(1500)
+
+      var captureRes = await new Promise(function(resolve) {
+        chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE' }, function(response) {
+          if (chrome.runtime.lastError) resolve(null)
+          else resolve(response)
+        })
+      })
+
+      try { chrome.tabs.remove(tab.id) } catch(e) {}
+      openTabId = null
+
+      if (!captureRes || !captureRes.ok) {
+        throw new Error(captureRes && captureRes.error ? captureRes.error : 'CAPTURE yanıtsız')
+      }
+
+      await apiFetchJson('POST', '/admin/product/extract', captureRes.data)
+      await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
+        jobId: parseInt(job.id, 10), workerId: wId, status: 'extract_done'
+      })
+    }
+
+    // ─── ai_and_list + scrape_and_list: AI üret ────────────────────────────
     await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'extract_done'
-    })
-    await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'ai_running'
+      jobId: parseInt(job.id, 10), workerId: wId, status: 'ai_running'
     })
     await apiFetchJson('POST', '/admin/ai-listing/generate', { asin: job.asin })
+
+    // ─── Tamamlandı ─────────────────────────────────────────────────────────
+    clearTimeout(timeoutHandle)
+    done = true
     await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'ai_done'
+      jobId: parseInt(job.id, 10), workerId: wId, status: 'ai_done'
     })
+    // listing_done — run counter "completed" sayısını günceller
     await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'listing_running'
+      jobId: parseInt(job.id, 10), workerId: wId, status: 'listing_done'
     })
-    await apiFetchJson('POST', '/admin/pool/dispatch-selected', {
-      storeCode: job.storeCode,
-      poolIds: [parseInt(job.poolId, 10)]
-    })
-    await apiFetchJson('POST', '/admin/listing/run', {
-      storeCode: job.storeCode,
-      count: 1,
-      dryRun: false,
-      simulationMode: false,
-      quantity: job.quantity,
-      delaySeconds: 0
-    })
-    await apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId: parseInt(job.id, 10),
-      workerId: wId,
-      status: 'listing_done'
-    })
-    await sleep(job.delaySeconds * 1000)
-    workerBusy = false
+    console.log('[Worker] Job done:', job.id, '| ASIN:', job.asin, '| type:', jobType)
+
   } catch(e) {
-    await reportFailed(job, 'extract', e && e.message ? e.message : String(e), wId)
+    clearTimeout(timeoutHandle)
+    if (done) return
+    done = true
+    var msg = e && e.message ? e.message : String(e)
+    console.error('[Worker] processJob error:', msg)
+    if (openTabId !== null) {
+      try { chrome.tabs.remove(openTabId) } catch(e2) {}
+      openTabId = null
+    }
+    await reportFailed(job, jobType === 'ai_and_list' ? 'ai' : 'extract', msg, wId)
+    return
   }
+
+  workerBusy = false
 }
 
 // ─── Scan state ──────────────────────────────────────────────────────────────
@@ -243,14 +303,12 @@ async function findOpenAmazonTab() {
   return new Promise(function (resolve) {
     chrome.tabs.query({ url: 'https://www.amazon.com/*' }, function (tabs) {
       if (chrome.runtime.lastError || !tabs || tabs.length === 0) { resolve(null); return }
-      // Önce /s sayfasında olanı tercih et
       for (var i = 0; i < tabs.length; i++) {
         var url = tabs[i].url || ''
         if (url.includes('amazon.com/s') || url.includes('amazon.com/s?')) {
           resolve(tabs[i].id); return
         }
       }
-      // /s bulunamazsa herhangi bir Amazon sekmesi
       resolve(tabs[0].id)
     })
   })
@@ -269,7 +327,6 @@ async function runScan(options) {
   try {
     await sendToPanel({ type: 'DP_SCAN_PROGRESS', phase: 'opening', page: 0, total: pageCount, count: 0 })
 
-    // Açık Amazon sekmesini bul; yoksa yeni sekme aç
     var existingTabId = await findOpenAmazonTab()
     if (existingTabId !== null) {
       activeScanTabId = existingTabId
@@ -300,7 +357,6 @@ async function runScan(options) {
         break
       }
 
-      // Lazy-load içerikler (aylık satış, prime badge) için ekstra bekleme
       await sleep(800)
 
       try {
@@ -311,7 +367,6 @@ async function runScan(options) {
           })
         })
         if (scanRes && scanRes.ok) {
-          // Accumulate passed (dedup by ASIN)
           var pagePassed = scanRes.passed || []
           for (var i = 0; i < pagePassed.length; i++) {
             var c = pagePassed[i]
@@ -320,7 +375,6 @@ async function runScan(options) {
               allPassed.push(c)
             }
           }
-          // Accumulate rejected (dedup by ASIN, only if not already passed)
           var pageRejected = scanRes.rejected || []
           for (var j = 0; j < pageRejected.length; j++) {
             var item = pageRejected[j]
@@ -356,7 +410,6 @@ async function runScan(options) {
       }
     }
 
-    // Sekmeyi kapatma — kullanıcı Amazon'da kalmak isteyebilir
     activeScanTabId = null
 
     await sendToPanel({

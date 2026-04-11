@@ -35,6 +35,7 @@ type EbayPayloadSourceRow = {
   taxEstimatePercent:  string | null
   ebayFeePercent:      string | null
   templateId:          string | null
+  ebayListingPrice:    string | null
 }
 
 export type EbayListingPayload = {
@@ -162,6 +163,12 @@ type PriceResolution = {
 }
 
 function resolveListingPrice(row: EbayPayloadSourceRow): PriceResolution {
+  const ebayListingPrice = parseNum(row.ebayListingPrice)
+  if (ebayListingPrice !== null && ebayListingPrice > 0) {
+    const amazonCost = parseNum(row.amazonPrice) ?? ebayListingPrice
+    return { price: round2(ebayListingPrice), amazonCost, pricingSource: "calculated" }
+  }
+
   const amazonCost          = parseNum(row.amazonPrice)
   const settingsEnabled     = row.settingsEnabled === true
   const markupPercent       = parseNum(row.markupPercent)
@@ -224,8 +231,13 @@ function resolveDescription(
 
 export async function buildEbayListingPayloads(
   workspaceId: string,
-  limit = 100
+  limit = 100,
+  poolIds?: number[]
 ): Promise<EbayListingPayload[]> {
+  const poolFilter = poolIds && poolIds.length > 0
+    ? `AND ap.id = ANY($3::bigint[])`
+    : ""
+
   const sql = `
     SELECT
       ap.id                          AS "poolId",
@@ -250,7 +262,8 @@ export async function buildEbayListingPayloads(
       ss.profit_margin_percent::text AS "profitMarginPercent",
       ss.tax_estimate_percent::text  AS "taxEstimatePercent",
       ss.ebay_fee_percent::text      AS "ebayFeePercent",
-      ss.template_id                 AS "templateId"
+      ss.template_id                 AS "templateId",
+      apc.attributes->>'ebayListingPrice' AS "ebayListingPrice"
     FROM asin_pool ap
     INNER JOIN asin_registry ar
       ON ar.id = ap.asin_registry_id
@@ -266,14 +279,21 @@ export async function buildEbayListingPayloads(
      AND ss.store_id = ap.assigned_store_id
     WHERE ap.workspace_id = $1
       AND ap.status = 'ready'
-      AND ap.pipeline_stage = 'ai_generated'
+      AND ap.pipeline_stage IN ('validated', 'scraped', 'ai_generated')
       AND ap.assigned_store_id IS NOT NULL
+      AND apc.asin_registry_id IS NOT NULL
+      AND apc.price > 0
       AND s.status = 'active'
+      ${poolFilter}
     ORDER BY ap.priority DESC, ap.id ASC
     LIMIT $2
   `
 
-  const result = await query<EbayPayloadSourceRow>(sql, [workspaceId, limit])
+  const params: unknown[] = poolIds && poolIds.length > 0
+    ? [workspaceId, limit, poolIds]
+    : [workspaceId, limit]
+
+  const result = await query<EbayPayloadSourceRow>(sql, params)
 
   return result.rows.map(row => {
     const title  = resolveTitle(row)

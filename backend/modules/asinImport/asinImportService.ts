@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { query } from "../../db/client"
+import { addNotification } from "../notifications/notificationService"
 import type { AsinImportRequest, AsinImportResponse } from "./asinImportTypes"
 
 // ─── ASIN PARSE & VALIDATE ────────────────────────────────────
@@ -245,7 +246,7 @@ export async function importAsins(
     if (!insertedSet.has(asin)) duplicateAsins.push(asin)
   }
 
-  return {
+  const response = {
     totalInput:           req.asins.length,
     valid:                validAsins.length,
     inserted:             insertedAsins.length,
@@ -257,4 +258,15 @@ export async function importAsins(
     conflictAsins,
     insertedAsins,
   }
+  try {
+    await addNotification(
+      workspaceId,
+      "info",
+      "Import Tamamlandı",
+      `${response.inserted} ASIN havuza eklendi`
+    )
+  } catch {
+    /* bildirim ana akışı bozmasın */
+  }
+  return response
 }

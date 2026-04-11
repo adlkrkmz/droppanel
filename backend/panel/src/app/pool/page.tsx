@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { createDispatchRun, deletePoolItems, getPool, getStores } from "@/lib/api"
+import { deletePoolItems, getPool, getStores } from "@/lib/api"
 import type { PoolRow, PoolResult, StoreRow } from "@/lib/api"
 import { useStore } from "@/lib/storeContext"
 import { useToast } from "@/lib/toastContext"
+import { addNotification } from "@/lib/notifications"
 
 const STAGES   = ["all", "validated", "scraped", "ai_generated", "listed"]
 const STATUSES = ["all", "ready", "completed"]
@@ -123,6 +124,8 @@ export default function PoolPage() {
   const [quickDispatchLoading, setQuickDispatchLoading] = useState<boolean>(false)
   const [quickDispatchMessage, setQuickDispatchMessage] = useState<string | null>(null)
   const quickDispatchMessageTimerRef = useRef<number | null>(null)
+  const quickPollRef = useRef<number | null>(null)
+  const dispatchPollRef = useRef<number | null>(null)
   const [poolPage, setPoolPage] = useState(1)
 
   const headerCheckboxRef = useRef<HTMLInputElement | null>(null)
@@ -145,6 +148,14 @@ export default function PoolPage() {
   }, [stageFilter, statusFilter, storeFilter])
 
   useEffect(() => { load() }, [load])
+
+  // Polling interval'larını unmount'ta temizle
+  useEffect(() => {
+    return () => {
+      if (quickPollRef.current)   clearInterval(quickPollRef.current)
+      if (dispatchPollRef.current) clearInterval(dispatchPollRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!dispatchResult) return
@@ -234,10 +245,12 @@ export default function PoolPage() {
         pipelineStage: "ai_generated",
       })
       showToast(`Scrape/AI completed for ${row.asin}`)
+      addNotification('success', 'AI Listing Hazır', `${row.asin} için AI listing oluşturuldu.`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
       showToast(msg, "error")
+      addNotification('error', `AI Hatası: ${row.asin}`, msg)
     } finally {
       setAiLoadingByPoolId(prev => ({ ...prev, [pid]: false }))
     }
@@ -261,20 +274,37 @@ export default function PoolPage() {
         quantity,
       })
 
-      await postAdmin("/admin/listing/run", {
-        storeCode: selectedStoreCode,
-        count: 1,
-        dryRun: false,
-        simulationMode: false,
-        quantity,
-      })
-      updateRow(pid, {
-        listingStatus: "success",
-        pipelineStage: "listed",
-        assignedStoreCode: selectedStoreCode,
-      })
+      const runRes = await postAdmin<{ publish?: { succeeded?: number; failed?: number; items?: { status: string; error?: string | null }[] } }>(
+        "/admin/listing/run",
+        {
+          storeCode: selectedStoreCode,
+          count: 1,
+          dryRun: false,
+          simulationMode: false,
+          quantity,
+        }
+      )
+
+      const succeeded = runRes?.publish?.succeeded ?? 0
+      const failed    = runRes?.publish?.failed    ?? 0
+
+      if (succeeded > 0) {
+        updateRow(pid, {
+          listingStatus: "success",
+          pipelineStage: "listed",
+          assignedStoreCode: selectedStoreCode,
+        })
+        addNotification('success', 'eBay\'e Yüklendi', `${row.asin} başarıyla listelendi.`)
+      } else {
+        const firstErr = runRes?.publish?.items?.find(i => i.status === "failed")?.error ?? null
+        const errMsg = firstErr ?? "eBay yükleme başarısız"
+        setError(errMsg)
+        addNotification('error', `Yüklenemedi: ${row.asin}`, errMsg)
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      addNotification('error', `Yüklenemedi: ${row.asin}`, msg)
     } finally {
       setPublishLoadingByPoolId(prev => ({ ...prev, [pid]: false }))
     }
@@ -290,10 +320,12 @@ export default function PoolPage() {
       setSelectedPoolIds(new Set())
       await load()
       showToast("Selected items deleted")
+      addNotification('info', 'Silindi', `${ids.length} ürün havuzdan silindi.`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
       showToast(msg, "error")
+      addNotification('error', 'Silme Hatası', msg)
     } finally {
       setDeleteLoading(false)
     }
@@ -302,60 +334,157 @@ export default function PoolPage() {
   const handleQuickDispatch = async (): Promise<void> => {
     if (quickDispatchLoading) return
 
+    // Önceki poll varsa temizle
+    if (quickPollRef.current) { clearInterval(quickPollRef.current); quickPollRef.current = null }
+
     setQuickDispatchLoading(true)
     setQuickDispatchMessage(null)
 
     try {
-      const poolRes = await getPool({ status: "ready", limit: quickDispatchCount })
-      const poolIds = poolRes.rows
-        .map(r => {
-          const id = r.poolId ?? (r as any).pool_id ?? (r as any).id
-          return typeof id === "string" ? parseInt(id, 10) : id
-        })
-        .filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0)
+      // UI filter'larından bağımsız fresh sorgu — sadece ready + işlenebilir stage'ler
+      const freshRes = await getPool({ status: "ready", limit: quickDispatchCount * 5 })
+      const ELIGIBLE_STAGES = ["validated", "scraped", "ai_generated"]
+      const poolIds = (freshRes.rows ?? [])
+        .filter(r => r.status === "ready" && ELIGIBLE_STAGES.includes(r.pipelineStage))
+        .slice(0, quickDispatchCount)
+        .map(r => r.poolId)
+        .filter((id): id is number => typeof id === "number" && id > 0)
 
-      if (poolIds.length === 0) throw new Error("No ready items in pool")
+      if (poolIds.length === 0) throw new Error("Kuyruğa alınabilecek ürün bulunamadı (ready + validated/scraped/ai_generated durumunda ürün yok)")
 
-      await createDispatchRun({
-        storeCode: selectedStore,
-        poolIds,
-        quantity: quickDispatchQuantity,
-        delaySeconds: quickDispatchDelay,
-      })
+      // Dispatch run oluştur — worker Amazon'dan veri çekip AI üretecek
+      const run = await postAdmin<{ id: number; total_jobs: number }>(
+        "/admin/dispatch-runs/create",
+        { storeCode: selectedStore, poolIds, quantity: quickDispatchQuantity, delaySeconds: quickDispatchDelay }
+      )
 
-      const msg = `Dispatch run created! ${poolIds.length} items queued.`
-      setQuickDispatchMessage(`✓ ${msg}`)
-      showToast(msg)
+      const runId = run.id
+      setQuickDispatchMessage(`${poolIds.length} ürün kuyruğa alındı, işleniyor... (0/${poolIds.length})`)
+      setQuickDispatchLoading(false) // Butonu serbest bırak, arka planda devam et
+
+      const POLL_TIMEOUT = 20 * 60 * 1000 // 20 dk max
+      const startedAt = Date.now()
+
+      quickPollRef.current = window.setInterval(async () => {
+        try {
+          if (Date.now() - startedAt > POLL_TIMEOUT) {
+            clearInterval(quickPollRef.current!); quickPollRef.current = null
+            setQuickDispatchMessage("✗ Zaman aşımı (20 dk)")
+            return
+          }
+
+          const statusRes = await fetch(`${API_BASE}/admin/dispatch-runs/status?runId=${runId}`)
+          const statusData = await statusRes.json() as { run: { status: string; completedJobs: number; failedJobs: number; totalJobs: number } | null }
+          const r = statusData.run
+          if (!r) { clearInterval(quickPollRef.current!); quickPollRef.current = null; return }
+
+          const done = r.completedJobs + r.failedJobs
+          setQuickDispatchMessage(`İşleniyor... (${done}/${r.totalJobs} tamamlandı, ${r.failedJobs} hatalı)`)
+
+          if (r.status === "completed") {
+            clearInterval(quickPollRef.current!); quickPollRef.current = null
+            setQuickDispatchMessage("eBay'e yükleniyor...")
+
+            await postAdmin("/admin/pool/dispatch-selected", { storeCode: selectedStore, poolIds })
+            const listingRes = await postAdmin<{ publish?: { succeeded?: number; failed?: number } }>(
+              "/admin/publish/run",
+              { storeCode: selectedStore, count: poolIds.length, selectionMode: "fifo", delaySeconds: quickDispatchDelay, quantity: quickDispatchQuantity, dryRun: false, simulationMode: false }
+            )
+            const succeeded = listingRes?.publish?.succeeded ?? 0
+            const failed    = listingRes?.publish?.failed    ?? 0
+            const msg = `✓ ${succeeded} listelendi, ${failed} başarısız (${poolIds.length} ürün)`
+            setQuickDispatchMessage(msg)
+            showToast(msg)
+            if (succeeded > 0) addNotification('success', 'Quick Dispatch Tamamlandı', `${succeeded}/${poolIds.length} ürün eBay'e yüklendi.`)
+            if (failed    > 0) addNotification('error',   'Quick Dispatch: Başarısız',  `${failed} ürün yüklenemedi.`)
+            await load()
+          }
+        } catch (e) {
+          clearInterval(quickPollRef.current!); quickPollRef.current = null
+          const msg = e instanceof Error ? e.message : String(e)
+          setQuickDispatchMessage(`✗ Polling hatası: ${msg}`)
+        }
+      }, 5000)
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      setQuickDispatchMessage(msg)
+      setQuickDispatchMessage(`✗ ${msg}`)
       showToast(msg, "error")
-    } finally {
+      addNotification('error', 'Quick Dispatch Hatası', msg)
       setQuickDispatchLoading(false)
     }
   }
 
   const handleDispatchSelected = async (): Promise<void> => {
     if (selectedPoolIds.size === 0) return
+
+    // Önceki poll varsa temizle
+    if (dispatchPollRef.current) { clearInterval(dispatchPollRef.current); dispatchPollRef.current = null }
+
     setDispatchLoading(true)
     setError(null)
 
-    try {
-      await createDispatchRun({
-        storeCode: selectedStore,
-        poolIds: [...selectedPoolIds],
-        quantity: dispatchQuantity,
-        delaySeconds: dispatchDelay,
-      })
+    const poolIds = [...selectedPoolIds]
 
-      setDispatchResult("✓ Dispatch run created! Extension worker will process jobs.")
+    try {
+      // Dispatch run oluştur — worker Amazon'dan veri çekip AI üretecek
+      const run = await postAdmin<{ id: number; total_jobs: number }>(
+        "/admin/dispatch-runs/create",
+        { storeCode: selectedStore, poolIds, quantity: dispatchQuantity, delaySeconds: dispatchDelay }
+      )
+
+      const runId = run.id
+      setDispatchResult(`${poolIds.length} ürün kuyruğa alındı, işleniyor... (0/${poolIds.length})`)
       setDispatchModalOpen(false)
-      setSelectedPoolIds(new Set())
-      await load()
+      setDispatchLoading(false) // Modal kapandı, arka planda devam ediyor
+
+      const POLL_TIMEOUT = 20 * 60 * 1000
+      const startedAt = Date.now()
+
+      dispatchPollRef.current = window.setInterval(async () => {
+        try {
+          if (Date.now() - startedAt > POLL_TIMEOUT) {
+            clearInterval(dispatchPollRef.current!); dispatchPollRef.current = null
+            setDispatchResult("✗ Zaman aşımı (20 dk)")
+            return
+          }
+
+          const statusRes = await fetch(`${API_BASE}/admin/dispatch-runs/status?runId=${runId}`)
+          const statusData = await statusRes.json() as { run: { status: string; completedJobs: number; failedJobs: number; totalJobs: number } | null }
+          const r = statusData.run
+          if (!r) { clearInterval(dispatchPollRef.current!); dispatchPollRef.current = null; return }
+
+          const done = r.completedJobs + r.failedJobs
+          setDispatchResult(`İşleniyor... (${done}/${r.totalJobs} tamamlandı, ${r.failedJobs} hatalı)`)
+
+          if (r.status === "completed") {
+            clearInterval(dispatchPollRef.current!); dispatchPollRef.current = null
+            setDispatchResult("eBay'e yükleniyor...")
+
+            await postAdmin("/admin/pool/dispatch-selected", { storeCode: selectedStore, poolIds })
+            const listingRes = await postAdmin<{ publish?: { succeeded?: number; failed?: number } }>(
+              "/admin/publish/run",
+              { storeCode: selectedStore, count: poolIds.length, selectionMode: "fifo", delaySeconds: dispatchDelay, quantity: dispatchQuantity, dryRun: false, simulationMode: false }
+            )
+            const succeeded = listingRes?.publish?.succeeded ?? 0
+            const failed    = listingRes?.publish?.failed    ?? 0
+            setDispatchResult(`✓ ${succeeded} listelendi, ${failed} başarısız`)
+            setSelectedPoolIds(new Set())
+            if (succeeded > 0) addNotification('success', 'Dispatch Tamamlandı', `${succeeded}/${poolIds.length} ürün eBay'e yüklendi.`)
+            if (failed    > 0) addNotification('error',   'Dispatch: Başarısız',  `${failed} ürün yüklenemedi.`)
+            await load()
+          }
+        } catch (e) {
+          clearInterval(dispatchPollRef.current!); dispatchPollRef.current = null
+          const msg = e instanceof Error ? e.message : String(e)
+          setDispatchResult(`✗ Polling hatası: ${msg}`)
+        }
+      }, 5000)
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setDispatchResult(`✗ ${msg}`)
-    } finally {
+      addNotification('error', 'Dispatch Hatası', msg)
       setDispatchLoading(false)
     }
   }

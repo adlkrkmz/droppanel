@@ -23,7 +23,10 @@ export type AmazonProductData = {
 }
 
 /** POST body — tek ürün (Extension sayfa bazlı gönderir) */
-export type ProductExtractorRequest = AmazonProductData
+export type ProductExtractorRequest = AmazonProductData & {
+  source?:      string
+  external_id?: string | null
+}
 
 /** Başarılı yanıt */
 export type ProductExtractorSuccessResponse = {
