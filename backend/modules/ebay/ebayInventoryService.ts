@@ -15,6 +15,7 @@
 import { isBlockedKey, selectBestCategory } from "../aiListing/aiListingService"
 import { getValidAccessToken } from "../ebayOAuth/ebayOAuthService"
 import { processAndUploadImages } from "../imageProcessor/imageProcessorService"
+import { alertPublishFailed } from "../notifications/telegramService"
 import { warehouseMerchantLocationKey } from "../settings/settingsService"
 import { getSettingsByStore } from "../storeSettings/storeSettingsRepository"
 import type { StoreSettingsRow } from "../storeSettings/storeSettingsTypes"
@@ -703,6 +704,9 @@ export async function runInventoryFlow(
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err)
     console.error(`  [InventoryFlow] Failed: ASIN=${asin} | ${result.error}`)
+
+    // Telegram alert
+    await alertPublishFailed(asin, result.error)
   }
 
   result.durationMs = Date.now() - startTime

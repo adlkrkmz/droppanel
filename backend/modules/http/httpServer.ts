@@ -18,6 +18,7 @@ import { handleCallback as ebayHandleCallback } from "../ebayOAuth/ebayOAuthServ
 import type { RouteDefinition, ServerConfig } from "./httpTypes"
 import type { AdminRequest }                  from "../admin/adminTypes"
 import { cleanupOld as cleanupOldNotifications } from "../notifications/notificationService"
+import { db as pool } from "../../db/client"
 
 function adapt(handler: (req: AdminRequest) => Promise<{ status: number; body: unknown }>) {
   return async (req: express.Request, res: express.Response): Promise<void> => {
@@ -123,7 +124,26 @@ export function buildApp(config: ServerConfig): express.Application {
     app[method](r.path, r.handler)
   }
   app.get("/admin/ebay/callback", ebayCallbackHandler)
-  app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }))
+  app.get("/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1")
+
+      res.json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        services: {
+          db: "ok",
+          api: "ok",
+        },
+      })
+    } catch (err) {
+      res.status(500).json({
+        status: "error",
+        timestamp: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  })
   app.use((_req, res) => res.status(404).json({ error: "NotFound", message: "Route not found" }))
   app.use((e: Error, _req: express.Request, res: express.Response, _n: express.NextFunction) => {
     res.status(500).json({ error: "InternalServerError", message: e.message })
