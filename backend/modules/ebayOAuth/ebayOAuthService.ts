@@ -14,6 +14,7 @@
 
 import { query }  from "../../db/client"
 import crypto     from "crypto"
+import { alertTokenExpiring, alertTokenRefreshFailed } from "../notifications/telegramService"
 import type {
   EbayAccountRow,
   EbayAccountStatus,
@@ -292,36 +293,44 @@ export async function refreshAccessToken(
     refreshToken = account.refreshToken
     expiresAt    = new Date(Date.now() + 2 * 60 * 60 * 1000)
   } else {
-    const cfg   = getOAuthConfig()
-    const base  = cfg.sandbox ? EBAY_TOKEN_SANDBOX : EBAY_TOKEN_PROD
-    const creds = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64")
+    try {
+      const cfg   = getOAuthConfig()
+      const base  = cfg.sandbox ? EBAY_TOKEN_SANDBOX : EBAY_TOKEN_PROD
+      const creds = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64")
 
-    const res = await fetch(base, {
-      method:  "POST",
-      headers: {
-        "Authorization": `Basic ${creds}`,
-        "Content-Type":  "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type:    "refresh_token",
-        refresh_token: account.refreshToken,
-        scope:         EBAY_SCOPES,
-      }).toString(),
-    })
+      const res = await fetch(base, {
+        method:  "POST",
+        headers: {
+          "Authorization": `Basic ${creds}`,
+          "Content-Type":  "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type:    "refresh_token",
+          refresh_token: account.refreshToken,
+          scope:         EBAY_SCOPES,
+        }).toString(),
+      })
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "")
-      throw new Error(`Token refresh failed: ${res.status} ${text}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`Token refresh failed: ${res.status} ${text}`)
+      }
+
+      const data = await res.json() as {
+        access_token: string
+        expires_in:   number
+      }
+
+      accessToken  = data.access_token
+      refreshToken = account.refreshToken
+      expiresAt    = new Date(Date.now() + data.expires_in * 1000)
+    } catch (err) {
+      await alertTokenRefreshFailed(
+        storeCode,
+        err instanceof Error ? err.message : String(err)
+      )
+      throw err
     }
-
-    const data = await res.json() as {
-      access_token: string
-      expires_in:   number
-    }
-
-    accessToken  = data.access_token
-    refreshToken = account.refreshToken
-    expiresAt    = new Date(Date.now() + data.expires_in * 1000)
   }
 
   await upsertAccount(
@@ -375,6 +384,10 @@ export async function getValidAccessToken(
 
   // 5 dk kala yenile
   const expiresAt = account.expiresAt ? new Date(account.expiresAt).getTime() : 0
+  const hoursLeft = (expiresAt - Date.now()) / 1000 / 3600
+  if (hoursLeft < 24 && hoursLeft > 0) {
+    await alertTokenExpiring(storeCode, `${Math.round(hoursLeft)} saat`)
+  }
   const tooSoon   = expiresAt < Date.now() + 5 * 60 * 1000
 
   if (tooSoon && account.refreshToken) {

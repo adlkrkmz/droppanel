@@ -28,12 +28,30 @@ export async function alertPublishFailed(asin: string, error: string): Promise<v
 
 export async function alertWorkerCrash(error: string): Promise<void> {
   await sendTelegramAlert(
-    `🔥 <b>Worker Crash</b>\n${error.slice(0, 300)}`
+    `🔥 <b>Worker Crash!</b>\nSistem durdu, müdahale gerekli!\nHata: ${error.slice(0, 300)}`
   )
 }
 
-export async function alertTokenExpiring(storeCode: string): Promise<void> {
+export async function alertTokenExpiring(storeCode: string, expiresIn: string): Promise<void> {
   await sendTelegramAlert(
-    `⚠️ <b>eBay Token Süresi Doluyor</b>\nMağaza: ${storeCode}`
+    `⚠️ <b>eBay Token Süresi Doluyor</b>\nMağaza: <code>${storeCode}</code>\nKalan süre: ${expiresIn}`
+  )
+}
+
+export async function alertTokenRefreshFailed(storeCode: string, error: string): Promise<void> {
+  await sendTelegramAlert(
+    `❌ <b>eBay Token Yenileme Başarısız!</b>\nMağaza: <code>${storeCode}</code>\nHata: ${error.slice(0, 200)}`
+  )
+}
+
+export async function alertQueueStuck(pendingCount: number, minutesStuck: number): Promise<void> {
+  await sendTelegramAlert(
+    `🚨 <b>Queue Takıldı!</b>\n${pendingCount} job ${minutesStuck} dakikadır işlenmiyor.\nWorker çalışıyor mu kontrol et!`
+  )
+}
+
+export async function alertRateLimit(service: string, error: string): Promise<void> {
+  await sendTelegramAlert(
+    `🚫 <b>Rate Limit / API Block</b>\nServis: <code>${service}</code>\nHata: ${error.slice(0, 200)}`
   )
 }

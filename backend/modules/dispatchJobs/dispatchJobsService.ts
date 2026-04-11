@@ -1,5 +1,6 @@
 import { query } from "../../db/client"
 import { addNotification } from "../notifications/notificationService"
+import { alertQueueStuck } from "../notifications/telegramService"
 import {
   createDispatchJobsBulk,
   createDispatchRun,
@@ -31,6 +32,8 @@ import type {
   RunStatusResult,
   ReportJobRequest,
 } from "./dispatchJobsTypes"
+
+let lastQueueAlertTime = 0
 
 type CreateRunRow = Awaited<ReturnType<typeof createDispatchRun>>
 type JobRow = Awaited<ReturnType<typeof reportJobProgress>>
@@ -222,3 +225,26 @@ export async function getActiveRuns(workspaceId: string): Promise<DispatchRun[]>
   return runs.map(r => mapRun(r as unknown as CreateRunRow))
 }
 
+export async function checkQueueHealth(): Promise<void> {
+  try {
+    const result = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM dispatch_jobs
+       WHERE status = 'pending'
+         AND created_at < NOW() - INTERVAL '10 minutes'`,
+      []
+    )
+    const stuckCount = parseInt(result.rows[0]?.count ?? "0", 10)
+
+    if (stuckCount > 0) {
+      const now = Date.now()
+      // Aynı alert'i 30 dakikada bir gönder
+      if (now - lastQueueAlertTime > 30 * 60 * 1000) {
+        lastQueueAlertTime = now
+        await alertQueueStuck(stuckCount, 10)
+      }
+    }
+  } catch (e) {
+    console.error("[QueueHealth] Check failed:", e)
+  }
+}
