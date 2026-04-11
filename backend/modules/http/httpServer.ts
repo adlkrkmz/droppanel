@@ -19,6 +19,7 @@ import type { RouteDefinition, ServerConfig } from "./httpTypes"
 import type { AdminRequest }                  from "../admin/adminTypes"
 import { cleanupOld as cleanupOldNotifications } from "../notifications/notificationService"
 import { db as pool } from "../../db/client"
+import { generateTraceId, createLogger } from "../logger/logger"
 
 function adapt(handler: (req: AdminRequest) => Promise<{ status: number; body: unknown }>) {
   return async (req: express.Request, res: express.Response): Promise<void> => {
@@ -119,6 +120,20 @@ export function buildApp(config: ServerConfig): express.Application {
     })
   )
   app.use((req, _res, next) => { console.log(`[HTTP] ${req.method} ${req.path}`); next() })
+  // Her request'e traceId ekle
+  app.use((req, res, next) => {
+    const traceId = generateTraceId()
+    req.headers["x-trace-id"] = traceId
+    res.setHeader("x-trace-id", traceId)
+
+    const logger = createLogger("api", traceId)
+    logger.info(`${req.method} ${req.path}`, {
+      asin:    req.body?.asin || req.query?.asin as string || undefined,
+      storeId: req.body?.storeCode || req.query?.storeCode as string || undefined,
+    })
+
+    next()
+  })
   for (const r of routes) {
     const method = r.method.toLowerCase() as "get" | "post" | "put" | "delete" | "patch"
     app[method](r.path, r.handler)
