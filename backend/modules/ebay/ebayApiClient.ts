@@ -22,6 +22,7 @@ import type {
   EbayPublishOfferResponse,
   EbayUpdateOfferRequest,
 } from "./ebayApiTypes"
+import { alertRateLimit } from "../notifications/telegramService"
 
 const EBAY_PRODUCTION_BASE = "https://api.ebay.com"
 const EBAY_SANDBOX_BASE    = "https://api.sandbox.ebay.com"
@@ -337,6 +338,14 @@ export class EbayApiClient {
       headers: this.buildJsonHeaders(),
       body:    JSON.stringify(normalizedBody),
     })
+
+    if (response.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (response.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${response.status}. URL: ${url}`)
+    }
 
     if (response.status !== 200 && response.status !== 201 && response.status !== 204) {
       const text = await response.text()
@@ -693,6 +702,14 @@ export class EbayApiClient {
       body:    JSON.stringify(body),
     })
 
+    if (response.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (response.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${response.status}. URL: ${url}`)
+    }
+
     if (!response.ok) {
       const text = await response.text()
       throw new Error(`createOffer failed: HTTP ${response.status} - ${text}`)
@@ -719,6 +736,14 @@ export class EbayApiClient {
       headers: this.buildJsonHeaders(),
       body:    JSON.stringify(body),
     })
+
+    if (res.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (res.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${url}`)
+    }
 
     if (res.status !== 200 && res.status !== 204) {
       const text = await res.text()
@@ -840,6 +865,14 @@ export class EbayApiClient {
       method:  "POST",
       headers: this.buildJsonHeaders(),
     })
+
+    if (response.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (response.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${response.status}. URL: ${url}`)
+    }
 
     if (!response.ok) {
       const text = await response.text()

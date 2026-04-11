@@ -55,3 +55,15 @@ export async function alertRateLimit(service: string, error: string): Promise<vo
     `🚫 <b>Rate Limit / API Block</b>\nServis: <code>${service}</code>\nHata: ${error.slice(0, 200)}`
   )
 }
+
+export async function alertHealthCheckFailed(service: string, error: string): Promise<void> {
+  await sendTelegramAlert(
+    `🏥 <b>Health Check Başarısız!</b>\nServis: <code>${service}</code>\nHata: ${error.slice(0, 200)}\nSistemi kontrol et!`
+  )
+}
+
+export async function alertBackupFailed(error: string): Promise<void> {
+  await sendTelegramAlert(
+    `💾 <b>Backup Başarısız!</b>\nVeritabanı yedeği alınamadı!\nHata: ${error.slice(0, 200)}`
+  )
+}
