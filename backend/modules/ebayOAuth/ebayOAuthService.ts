@@ -14,7 +14,7 @@
 
 import { query }  from "../../db/client"
 import crypto     from "crypto"
-import { alertTokenExpiring, alertTokenRefreshFailed } from "../notifications/telegramService"
+import { alertTokenRefreshFailed } from "../notifications/telegramService"
 import type {
   EbayAccountRow,
   EbayAccountStatus,
@@ -44,8 +44,12 @@ const EBAY_OAUTH_SANDBOX = "https://auth.sandbox.ebay.com/oauth2/authorize"
 const EBAY_TOKEN_PROD    = "https://api.ebay.com/identity/v1/oauth2/token"
 const EBAY_TOKEN_SANDBOX = "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
 
+const EBAY_COMMERCE_IDENTITY_PROD    = "https://apiz.ebay.com/commerce/identity/v1/user/"
+const EBAY_COMMERCE_IDENTITY_SANDBOX = "https://api.sandbox.ebay.com/commerce/identity/v1/user/"
+
 const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
+  "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
@@ -127,6 +131,50 @@ async function getStoreByCode(
   return result.rows[0] ?? null
 }
 
+/** S1, S2, … sırasında workspace’te kullanılmayan ilk kod (boşlukları doldurur). */
+export async function findNextAutoStoreCode(workspaceId: string): Promise<string> {
+  const result = await query<{ store_code: string }>(
+    `SELECT store_code FROM stores WHERE workspace_id = $1`,
+    [workspaceId]
+  )
+  const used = new Set<number>()
+  const re = /^S(\d+)$/i
+  for (const row of result.rows) {
+    const m = re.exec(String(row.store_code).trim())
+    if (m) used.add(parseInt(m[1]!, 10))
+  }
+  let n = 1
+  while (used.has(n)) n += 1
+  return `S${n}`
+}
+
+async function ensureActiveStore(
+  workspaceId: string,
+  storeCode:   string,
+  /** Yeni satır için mağaza adı (eBay username); mevcut mağazada dokunulmaz. */
+  nameForNewStore?: string
+): Promise<{ id: number; name: string }> {
+  const existing = await getStoreByCode(workspaceId, storeCode)
+  if (existing) return existing
+
+  const displayName = (nameForNewStore?.trim() || `Store ${storeCode}`).slice(0, 512)
+  try {
+    const ins = await query<{ id: number; name: string }>(
+      `INSERT INTO stores (workspace_id, name, store_code, status)
+       VALUES ($1, $2, $3, 'active')
+       RETURNING id, name`,
+      [workspaceId, displayName, storeCode]
+    )
+    const row = ins.rows[0]
+    if (!row) throw new Error(`Failed to create store "${storeCode}"`)
+    return row
+  } catch {
+    const again = await getStoreByCode(workspaceId, storeCode)
+    if (again) return again
+    throw new Error(`Failed to create store "${storeCode}"`)
+  }
+}
+
 async function upsertAccount(
   workspaceId:  string,
   storeId:      number,
@@ -156,16 +204,55 @@ async function upsertAccount(
   )
 }
 
+/** Mağaza adı için username öncelikli; ebay_user_id sütunu için userId tercih edilir. */
+async function fetchCommerceIdentityProfile(
+  accessToken: string,
+  sandbox:     boolean
+): Promise<{ storeName: string; ebayUserId: string }> {
+  const url = sandbox ? EBAY_COMMERCE_IDENTITY_SANDBOX : EBAY_COMMERCE_IDENTITY_PROD
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new Error(`eBay identity failed: ${res.status} ${text}`)
+  }
+  const data = await res.json() as { userId?: string; username?: string }
+  const username = data.username != null ? String(data.username).trim() : ""
+  const userId = data.userId != null ? String(data.userId).trim() : ""
+  const storeName = username || userId
+  if (!storeName) throw new Error("eBay identity response missing userId/username")
+  const ebayUserId = userId || username
+  return { storeName, ebayUserId }
+}
+
+async function updateStoreNameFromEbay(
+  workspaceId: string,
+  storeId:     number,
+  displayName: string
+): Promise<void> {
+  const n = displayName.trim().slice(0, 512)
+  if (!n) return
+  await query(
+    `UPDATE stores SET name = $1, updated_at = NOW()
+     WHERE workspace_id = $2 AND id = $3`,
+    [n, workspaceId, storeId]
+  )
+}
+
 // ─── OAUTH FUNCTIONS ──────────────────────────────────────────
 
 // 1. Auth URL üret
 export async function buildAuthUrl(
-  workspaceId:    string,
+  workspaceId: string,
   storeCode:      string,
-  simulationMode: boolean
+  simulationMode: boolean,
+  allowMissingStore = false
 ): Promise<EbayConnectUrlResponse> {
-  const store = await getStoreByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Active store not found: "${storeCode}"`)
+  if (!allowMissingStore) {
+    const store = await getStoreByCode(workspaceId, storeCode)
+    if (!store) throw new Error(`Active store not found: "${storeCode}"`)
+  }
 
   const state   = crypto.randomBytes(16).toString("hex")
   const stateParam = `${storeCode}:${workspaceId}:${state}`
@@ -203,17 +290,19 @@ export async function handleCallback(
   simulationMode: boolean
 ): Promise<EbayCallbackResult> {
   // state = "{storeCode}:{workspaceId}:{nonce}"
-  const [storeCode] = stateParam.split(":")
-  if (!storeCode) throw new Error("Invalid state parameter")
-
-  const store = await getStoreByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Store not found: "${storeCode}"`)
+  const parts = stateParam.split(":")
+  const storeCode = parts[0] ?? ""
+  const stateWorkspaceId = parts[1] ?? ""
+  if (!storeCode || !stateWorkspaceId) throw new Error("Invalid state parameter")
+  if (stateWorkspaceId !== workspaceId) throw new Error("Invalid state (workspace mismatch)")
 
   let accessToken:  string
   let refreshToken: string
   let expiresAt:    Date
   let ebayUserId:   string | null = null
   let scope:        string
+  let storeDisplayName: string
+  const cfg0       = getOAuthConfig()
 
   if (simulationMode || code === "SIM_CODE") {
     // Simulation: fake tokens
@@ -222,10 +311,10 @@ export async function handleCallback(
     expiresAt    = new Date(Date.now() + 2 * 60 * 60 * 1000) // 2 saat
     ebayUserId   = `sim_user_${storeCode.toLowerCase()}`
     scope        = EBAY_SCOPES
+    storeDisplayName = ebayUserId ?? `Store ${storeCode}`
   } else {
-    const cfg    = getOAuthConfig()
-    const base   = cfg.sandbox ? EBAY_TOKEN_SANDBOX : EBAY_TOKEN_PROD
-    const creds  = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64")
+    const base   = cfg0.sandbox ? EBAY_TOKEN_SANDBOX : EBAY_TOKEN_PROD
+    const creds  = Buffer.from(`${cfg0.clientId}:${cfg0.clientSecret}`).toString("base64")
 
     const res = await fetch(base, {
       method:  "POST",
@@ -236,7 +325,7 @@ export async function handleCallback(
       body: new URLSearchParams({
         grant_type:   "authorization_code",
         code,
-        redirect_uri: cfg.redirectUri,
+        redirect_uri: cfg0.redirectUri,
       }).toString(),
     })
 
@@ -257,9 +346,16 @@ export async function handleCallback(
     refreshToken = data.refresh_token
     expiresAt    = new Date(Date.now() + data.expires_in * 1000)
     scope        = data.scope
+
+    const profile = await fetchCommerceIdentityProfile(accessToken, cfg0.sandbox)
+    ebayUserId = profile.ebayUserId
+    storeDisplayName = profile.storeName
   }
 
+  const store = await ensureActiveStore(workspaceId, storeCode, storeDisplayName)
+
   await upsertAccount(workspaceId, store.id, ebayUserId, accessToken, refreshToken, expiresAt, scope)
+  await updateStoreNameFromEbay(workspaceId, store.id, storeDisplayName)
 
   return {
     storeCode,
@@ -384,10 +480,6 @@ export async function getValidAccessToken(
 
   // 5 dk kala yenile
   const expiresAt = account.expiresAt ? new Date(account.expiresAt).getTime() : 0
-  const hoursLeft = (expiresAt - Date.now()) / 1000 / 3600
-  if (hoursLeft < 24 && hoursLeft > 0) {
-    await alertTokenExpiring(storeCode, `${Math.round(hoursLeft)} saat`)
-  }
   const tooSoon   = expiresAt < Date.now() + 5 * 60 * 1000
 
   if (tooSoon && account.refreshToken) {

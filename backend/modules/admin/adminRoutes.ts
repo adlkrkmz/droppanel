@@ -16,6 +16,7 @@ import type {
 import {
   buildAuthUrl, handleCallback, getAccountStatus,
   refreshAccessToken, getAllAccounts, getValidAccessToken,
+  findNextAutoStoreCode,
 }                                    from "../ebayOAuth/ebayOAuthService"
 import type {
   EbayAccountStatus, EbayCallbackResult, EbayConnectUrlResponse,
@@ -598,6 +599,28 @@ export async function handleGetEbayConnectUrl(req: AdminRequest): Promise<AdminR
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
 }
 
+/** storeCode=AUTO → sıradaki S1,S2,… kodu ile OAuth URL (mağaza callback’te oluşur). */
+export async function handlePostEbayAuthUrl(req: AdminRequest): Promise<AdminResponse<EbayConnectUrlResponse>> {
+  try {
+    const workspaceId   = getWorkspaceId()
+    const storeCodeRaw  = String(req.query["storeCode"] ?? "").trim().toUpperCase()
+    const simulation    = (process.env.EBAY_SIMULATION ?? "true") !== "false"
+    if (storeCodeRaw !== "AUTO") return bad("storeCode must be AUTO")
+    const nextCode = await findNextAutoStoreCode(workspaceId)
+    return { status: 200, body: await buildAuthUrl(workspaceId, nextCode, simulation, true) }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
+/** Settings “+ Add Store”: sıradaki S kodu + OAuth URL (query gerekmez). */
+export async function handlePostEbayConnect(_req: AdminRequest): Promise<AdminResponse<EbayConnectUrlResponse>> {
+  try {
+    const workspaceId = getWorkspaceId()
+    const simulation  = (process.env.EBAY_SIMULATION ?? "true") !== "false"
+    const nextCode    = await findNextAutoStoreCode(workspaceId)
+    return { status: 200, body: await buildAuthUrl(workspaceId, nextCode, simulation, true) }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
 export async function handleGetEbayCallback(req: AdminRequest): Promise<AdminResponse<EbayCallbackResult>> {
   try {
     const workspaceId  = getWorkspaceId()
@@ -656,18 +679,17 @@ export async function handlePostEbayDisconnect(
        LIMIT 1`,
       [workspaceId, storeCode]
     )
-    const storeId = storeRes.rows[0]?.id
+       const storeId = storeRes.rows[0]?.id
     if (!storeId) return bad(`Store not found for storeCode="${storeCode}"`)
 
-    // 2) ebay_accounts içindeki token'ları sil (workspace_id + store_id eşleşmesi)
     await query(
-      `UPDATE ebay_accounts
-       SET access_token  = NULL,
-           refresh_token = NULL,
-           expires_at    = NULL,
-           updated_at    = NOW()
-       WHERE workspace_id = $1
-         AND store_id = $2`,
+      `DELETE FROM ebay_accounts
+       WHERE workspace_id = $1 AND store_id = $2`,
+      [workspaceId, storeId]
+    )
+    await query(
+      `DELETE FROM stores
+       WHERE workspace_id = $1 AND id = $2`,
       [workspaceId, storeId]
     )
 
@@ -857,6 +879,8 @@ export const adminRouteMap = [
   { method: "GET",  path: "/admin/dispatch-runs/status",  handler: handleGetDispatchRunStatus },
   { method: "GET",  path: "/admin/dispatch-runs/active",  handler: handleGetDispatchActiveRuns },
   { method: "GET",  path: "/admin/ebay/connect-url",       handler: handleGetEbayConnectUrl     },
+  { method: "POST", path: "/admin/ebay/auth-url", handler: handlePostEbayAuthUrl       },
+  { method: "POST", path: "/admin/ebay/connect", handler: handlePostEbayConnect       },
   { method: "GET",  path: "/admin/ebay/callback",            handler: handleGetEbayCallback       },
   { method: "GET",  path: "/admin/ebay/account-status",      handler: handleGetEbayAccountStatus  },
   { method: "GET",  path: "/admin/ebay/accounts",            handler: handleGetEbayAccounts       },

@@ -9,7 +9,7 @@ import {
   handleGetPool, handlePostPoolDispatch, handlePostListingRun, handleDeletePoolItems,
   handlePostDispatchRunCreate, handlePostDispatchJobClaimNext, handlePostDispatchJobReport,
   handleGetDispatchRunStatus, handleGetDispatchActiveRuns,
-  handleGetEbayConnectUrl, handleGetEbayCallback, handleGetEbayAccountStatus, handleGetEbayAccounts, handlePostEbayRefresh, handleGetMonitorListings, handlePostMonitorUpdatePrice, handlePostMonitorUpdateStock, handlePostMonitorBlind, handlePostAsinImport, handlePostProductExtract, handlePostAiListingGenerate, handlePostDispatch, handlePostPublishRun,
+  handleGetEbayConnectUrl, handlePostEbayAuthUrl, handlePostEbayConnect, handleGetEbayCallback, handleGetEbayAccountStatus, handleGetEbayAccounts, handlePostEbayRefresh, handleGetMonitorListings, handlePostMonitorUpdatePrice, handlePostMonitorUpdateStock, handlePostMonitorBlind, handlePostAsinImport, handlePostProductExtract, handlePostAiListingGenerate, handlePostDispatch, handlePostPublishRun,
   handlePostCreateStore, handlePostEbayDisconnect, handlePostDispatchJobsCleanupStale,
   handleGetSettings, handlePostSettingsAddress, handleGetSettingsPolicies, handlePostSettingsPolicies, handlePostSettingsMarkup,
   handleGetNotifications, handlePostNotificationsRead, handlePostNotificationsReadAll,
@@ -42,6 +42,13 @@ function handleGetPoolWithLog(req: AdminRequest) {
   return handleGetPool(req)
 }
 
+function ebayOAuthReturnUrl(): string {
+  return (
+    process.env.EBAY_OAUTH_RETURN_URL?.trim() ||
+    "http://localhost:3000/settings?ebay_oauth=1"
+  )
+}
+
 async function ebayCallbackHandler(req: express.Request, res: express.Response): Promise<void> {
   try {
     const workspaceId = process.env.WORKSPACE_ID ?? ""
@@ -49,7 +56,7 @@ async function ebayCallbackHandler(req: express.Request, res: express.Response):
     const state       = (req.query["state"] as string) ?? ""
     const simulation  = (process.env.EBAY_SIMULATION ?? "true") !== "false"
     await ebayHandleCallback(workspaceId, code, state, simulation)
-    res.redirect(302, "http://localhost:3000/stores")
+    res.redirect(302, ebayOAuthReturnUrl())
   } catch (e) {
     console.error("[OAuth callback]", e)
     res.status(500).json({ error: "OAuthError", message: e instanceof Error ? e.message : "Unknown" })
@@ -76,6 +83,8 @@ const routes: RouteDefinition[] = [
   { method: "get",  path: "/admin/dispatch-runs/status",  handler: adapt(handleGetDispatchRunStatus) },
   { method: "get",  path: "/admin/dispatch-runs/active",  handler: adapt(handleGetDispatchActiveRuns) },
   { method: "get",  path: "/admin/ebay/connect-url",       handler: adapt(handleGetEbayConnectUrl)    },
+  { method: "post", path: "/admin/ebay/auth-url", handler: adapt(handlePostEbayAuthUrl)     },
+  { method: "post", path: "/admin/ebay/connect", handler: adapt(handlePostEbayConnect)     },
   { method: "get",  path: "/admin/ebay/account-status",    handler: adapt(handleGetEbayAccountStatus) },
   { method: "get",  path: "/admin/ebay/accounts",          handler: adapt(handleGetEbayAccounts)      },
   { method: "post", path: "/admin/ebay/refresh",           handler: adapt(handlePostEbayRefresh)      },

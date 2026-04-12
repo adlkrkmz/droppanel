@@ -556,6 +556,9 @@ video {
 .relative{
   position: relative;
 }
+.sticky{
+  position: sticky;
+}
 .inset-0{
   inset: 0px;
 }
@@ -603,6 +606,9 @@ video {
 }
 .mt-1\.5{
   margin-top: 0.375rem;
+}
+.mt-3{
+  margin-top: 0.75rem;
 }
 .mt-8{
   margin-top: 2rem;
@@ -655,11 +661,14 @@ video {
 .w-full{
   width: 100%;
 }
-.min-w-\[56px\]{
-  min-width: 56px;
+.min-w-0{
+  min-width: 0px;
 }
 .max-w-2xl{
   max-width: 42rem;
+}
+.max-w-\[160px\]{
+  max-width: 160px;
 }
 .max-w-md{
   max-width: 28rem;
@@ -738,6 +747,11 @@ video {
 }
 .overflow-x-auto{
   overflow-x: auto;
+}
+.truncate{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rounded{
   border-radius: 0.25rem;

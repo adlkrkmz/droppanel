@@ -155,7 +155,13 @@ type EbayAccountStatus = {
   scope:      string | null
 }
 
-function EbayConnectSection({ storeCode }: { storeCode: string }) {
+function EbayConnectSection({
+  storeCode,
+  onDisconnected,
+}: {
+  storeCode: string
+  onDisconnected?: () => void | Promise<void>
+}) {
   const [status, setStatus] = useState<EbayAccountStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -217,7 +223,7 @@ function EbayConnectSection({ storeCode }: { storeCode: string }) {
 
   async function handleDisconnect() {
     const ok = window.confirm(
-      `Disconnect eBay account for ${storeCode}? This will remove the token.`
+      `Remove store ${storeCode} and disconnect eBay? This deletes the store and its eBay link.`
     )
     if (!ok) return
 
@@ -229,7 +235,7 @@ function EbayConnectSection({ storeCode }: { storeCode: string }) {
         body: JSON.stringify({ storeCode }),
       })
       if (!res.ok) throw new Error(await res.text().catch(() => "Disconnect failed"))
-      await loadStatus()
+      await onDisconnected?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Disconnect failed")
     }
@@ -416,6 +422,7 @@ export default function SettingsPage() {
   const [createStoreCode, setCreateStoreCode] = useState("")
   const [creatingStore, setCreatingStore] = useState(false)
   const [createStoreError, setCreateStoreError] = useState<string | null>(null)
+  const [addingStoreOAuth, setAddingStoreOAuth] = useState(false)
 
   const [loc, setLoc] = useState(emptyAddress)
 
@@ -449,6 +456,64 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => { void loadStores() }, [loadStores])
+
+  useEffect(() => {
+    if (storesLoading) return
+    if (stores.length === 0) {
+      setSelectedStore("S1")
+      return
+    }
+    if (!stores.some((s) => s.storeCode === selectedStore)) {
+      setSelectedStore(stores[0]!.storeCode)
+    }
+  }, [stores, storesLoading, selectedStore, setSelectedStore])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("ebay_oauth") !== "1") return
+
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.location.reload()
+      } catch {
+        /* ignore */
+      }
+      window.close()
+      return
+    }
+
+    params.delete("ebay_oauth")
+    const qs = params.toString()
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`
+    window.history.replaceState({}, "", next)
+    void loadStores()
+    showToast("eBay store connected.", "success")
+  }, [loadStores, showToast])
+
+  async function handleAddStore() {
+    setAddingStoreOAuth(true)
+    try {
+      const res = await fetch(`${API_BASE}/admin/ebay/connect`, {
+        method: "POST",
+        credentials: "include",
+      })
+      if (!res.ok) {
+        showToast((await res.text().catch(() => "")) || `HTTP ${res.status}`, "error")
+        return
+      }
+      const data = (await res.json()) as { authUrl?: string }
+      if (!data.authUrl) {
+        showToast("No auth URL returned", "error")
+        return
+      }
+      window.open(data.authUrl, "_blank")
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to start eBay OAuth", "error")
+    } finally {
+      setAddingStoreOAuth(false)
+    }
+  }
 
   const loadPolicies = useCallback(async (code: string) => {
     if (!code) return
@@ -712,8 +777,7 @@ export default function SettingsPage() {
   const sectionTitleStyle = { color: "var(--text)" }
   const grid2 = "grid grid-cols-1 sm:grid-cols-2 gap-4"
 
-  const activeStores = stores.filter((s) => s.status === "active")
-  const storesForTabs = activeStores.length > 0 ? activeStores : stores
+  const storesForTabs = stores
 
   return (
     <div className="max-w-2xl animate-fade-in">
@@ -737,38 +801,55 @@ export default function SettingsPage() {
               setCreateStoreOpen(true)
             }}
             disabled={storesLoading}
-            className="px-3 py-2 rounded text-sm font-mono font-semibold uppercase tracking-wider transition-opacity disabled:opacity-50"
-            style={{ background: "var(--accent)", color: "#000" }}
+            className="px-3 py-2 rounded text-sm font-mono font-semibold uppercase tracking-wider transition-opacity disabled:opacity-50 border border-[var(--border)]"
+            style={{ background: "transparent", color: "var(--sub)" }}
           >
-            + Add Store
+            Manual create
           </button>
         </div>
 
         {storesLoading ? (
           <p className="text-sm font-mono text-[var(--dim)]">Loading stores...</p>
         ) : storesForTabs.length === 0 ? (
-          <p className="text-sm font-mono text-[var(--dim)]">No stores found. Add stores in the admin.</p>
+          <p className="text-sm font-mono text-[var(--dim)]">
+            No stores yet. Use + Add Store below to connect eBay, or Manual create.
+          </p>
         ) : (
           <div
             className="flex flex-nowrap gap-1 p-1 rounded bg-[var(--surface)] border border-[var(--border)] overflow-x-auto"
           >
-            {storesForTabs.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSelectedStore(s.storeCode)}
-                className="min-w-[56px] py-2 px-3 rounded text-sm font-mono font-medium transition-colors"
-                style={{
-                  background: selectedStore === s.storeCode ? "var(--accent)" : "transparent",
-                  color: selectedStore === s.storeCode ? "#000" : "var(--sub)",
-                }}
-                title={s.name}
-              >
-                {s.storeCode}
-              </button>
-            ))}
+            {storesForTabs.map((s) => {
+              const tabLabel = s.name?.trim() || s.storeCode
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSelectedStore(s.storeCode)}
+                  className="max-w-[160px] min-w-0 shrink-0 truncate py-2 px-3 rounded text-sm font-mono font-medium transition-colors"
+                  style={{
+                    background: selectedStore === s.storeCode ? "var(--accent)" : "transparent",
+                    color: selectedStore === s.storeCode ? "#000" : "var(--sub)",
+                  }}
+                  title={`${s.storeCode}${tabLabel !== s.storeCode ? ` — ${tabLabel}` : ""}`}
+                >
+                  {tabLabel}
+                </button>
+              )
+            })}
           </div>
         )}
+
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => { void handleAddStore() }}
+            disabled={storesLoading || addingStoreOAuth}
+            className="px-3 py-2 rounded text-sm font-mono font-semibold uppercase tracking-wider transition-opacity disabled:opacity-50"
+            style={{ background: "var(--accent)", color: "#000" }}
+          >
+            {addingStoreOAuth ? "Opening eBay…" : "+ Add Store"}
+          </button>
+        </div>
 
         {settings?.storeName && (
           <p className="mt-1.5 text-xs font-mono text-[var(--dim)]">{settings.storeName}</p>
@@ -1128,7 +1209,13 @@ export default function SettingsPage() {
             <h2 className={sectionTitle} style={sectionTitleStyle}>
               BÖLÜM 4 — EBAY CONNECTION
             </h2>
-            <EbayConnectSection storeCode={selectedStore} />
+            <EbayConnectSection
+              storeCode={selectedStore}
+              onDisconnected={async () => {
+                await loadStores()
+                showToast("Store removed.")
+              }}
+            />
           </section>
         </>
       )}

@@ -185,6 +185,15 @@ export async function updateStock(
     await client.updateQuantity(req.sku, req.quantity)
     console.log(`[MonitorActions] updateStock completed updateQuantity sku=${req.sku} qty=${req.quantity}`)
 
+    // Offer quantity'sini de güncelle
+    const offerId = await client.getOfferId(req.sku)
+    if (offerId) {
+      await client.updateOfferQuantity(offerId, req.quantity)
+      console.log(`[MonitorActions] updateStock offer updated offerId=${offerId} qty=${req.quantity}`)
+    } else {
+      console.warn(`[MonitorActions] updateStock offerId not found for sku=${req.sku}`)
+    }
+
   } catch (e) {
     console.error("[MonitorActions] updateStock error:", e instanceof Error ? e.message : String(e))
     throw e

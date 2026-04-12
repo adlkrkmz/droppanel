@@ -10,7 +10,7 @@
 // Media (EPS) upload uses apim.ebay.com (Commerce Media API).
 // Taxonomy: GET /commerce/taxonomy/v1/category_tree/0/get_category_suggestions
 // Offer:    PUT /sell/inventory/v1/offer/{offerId} (updateOffer)
-// Listing:  GET /sell/inventory/v1/listing (fiyat listesi — getActiveListingPrices)
+// Offers:   GET /sell/inventory/v1/offer (fiyat + stok — getActiveListingPrices)
 // ----------------------------------------------------------------
 
 import type {
@@ -95,6 +95,8 @@ export type EbayActiveListingPriceRow = {
   listingId:         string | null
   availableQuantity: number
   currency:          string
+  /** eBay offer.status (PUBLISHED, vb.) */
+  offerStatus?:      string | null
 }
 
 export type EbayApiErrorDetail = {
@@ -129,14 +131,6 @@ export type EbayMerchantLocationGetResult =
   | { kind: "not_found" }
   | { kind: "error"; message: string }
 
-function extractListingArrayFromPage(page: Record<string, unknown>): unknown[] {
-  for (const key of ["listings", "listingSummaries", "items"]) {
-    const v = page[key]
-    if (Array.isArray(v)) return v
-  }
-  return []
-}
-
 function extractPriceAndCurrency(obj: Record<string, unknown>): { value: number; currency: string } {
   const fromPriceLeaf = (node: unknown): { value: number; currency: string } | null => {
     if (!node || typeof node !== "object") return null
@@ -162,16 +156,6 @@ function extractPriceAndCurrency(obj: Record<string, unknown>): { value: number;
   return { value: 0, currency: "USD" }
 }
 
-function pickSkuFromListingRecord(r: Record<string, unknown>): string {
-  if (typeof r.sku === "string" && r.sku.trim()) return r.sku.trim()
-  const inv = r.inventoryItem
-  if (inv && typeof inv === "object") {
-    const s = (inv as Record<string, unknown>).sku
-    if (typeof s === "string" && s.trim()) return s.trim()
-  }
-  return ""
-}
-
 function pickListingIdFromRecord(r: Record<string, unknown>): string {
   if (typeof r.listingId === "string" && r.listingId.trim()) return r.listingId.trim()
   if (r.listing && typeof r.listing === "object") {
@@ -181,36 +165,42 @@ function pickListingIdFromRecord(r: Record<string, unknown>): string {
   return ""
 }
 
-function parseListingEntryToPriceRow(entry: unknown): EbayActiveListingPriceRow | null {
-  if (!entry || typeof entry !== "object") return null
-  const r = entry as Record<string, unknown>
-  const listingId = pickListingIdFromRecord(r)
-  const sku = pickSkuFromListingRecord(r)
-  if (!listingId || !sku) return null
+function offerSummaryToActivePriceRow(o: EbayOfferSummary): EbayActiveListingPriceRow | null {
+  const sku = typeof o.sku === "string" ? o.sku.trim() : ""
+  if (!sku) return null
+  const offerId = typeof o.offerId === "string" ? o.offerId.trim() : ""
+  if (!offerId) return null
 
-  const { value: price, currency } = extractPriceAndCurrency(r)
-  const qty =
-    typeof r.quantity === "number" ? r.quantity
-    : typeof r.availableQuantity === "number" ? r.availableQuantity
-    : 0
-  const offerId = typeof r.offerId === "string" ? r.offerId : ""
+  const raw = o.pricingSummary?.price?.value
+  const price =
+    raw === undefined || raw === null || raw === ""
+      ? NaN
+      : parseFloat(String(raw))
+  const currency =
+    typeof o.pricingSummary?.price?.currency === "string" && o.pricingSummary.price.currency.trim()
+      ? o.pricingSummary.price.currency.trim()
+      : "USD"
+
+  const listingRaw = o.listing?.listingId
+  const listingId =
+    typeof listingRaw === "string" && listingRaw.trim() ? listingRaw.trim() : null
+
+  const q = o.availableQuantity
+  const availableQuantity = typeof q === "number" && Number.isFinite(q) ? q : 0
+
+  const st = o.status
+  const offerStatus =
+    typeof st === "string" && st.trim() ? st.trim() : null
 
   return {
     sku,
     price:             Number.isFinite(price) ? price : 0,
     offerId,
     listingId,
-    availableQuantity: qty,
+    availableQuantity,
     currency,
+    offerStatus,
   }
-}
-
-function bumpListingPageOffset(url: string, limit: number, baseUrl: string): string {
-  const u = new URL(url, baseUrl)
-  const cur = Number.parseInt(u.searchParams.get("offset") ?? "0", 10)
-  u.searchParams.set("limit", String(limit))
-  u.searchParams.set("offset", String(Number.isFinite(cur) ? cur + limit : limit))
-  return u.href
 }
 
 function mergeListingPriceRowsBySku(rows: EbayActiveListingPriceRow[]): EbayActiveListingPriceRow[] {
@@ -777,9 +767,137 @@ export class EbayApiClient {
   }
 
   /**
-   * Aktif listeleme fiyatları: önce
-   * GET /sell/inventory/v1/listing?limit=200&offset=… (SKU query yok; `next` veya offset ile sayfalar).
-   * Başarısız olursa getInventoryItems ile tüm envanter; SKU + varsa fiyat (pricingSummary / price).
+   * GET /sell/inventory/v1/offer?sku={sku}
+   * İlk dönen offer kaydının offerId değeri (yoksa null).
+   */
+  async getOfferId(sku: string): Promise<string | null> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] getOfferId sku=${sku}`)
+      return null
+    }
+
+    const clean = sku?.trim() ?? ""
+    if (!clean) return null
+
+    const url = `${this.baseUrl}/sell/inventory/v1/offer?sku=${encodeURIComponent(clean)}`
+    const res = await fetch(url, { headers: this.buildJsonHeaders() })
+
+    if (res.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (res.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${url}`)
+    }
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`getOfferId failed: HTTP ${res.status} - ${text}`)
+    }
+
+    const page = (await res.json()) as EbayGetOffersPage
+    const id   = page.offers?.[0]?.offerId?.trim()
+    return id && id.length > 0 ? id : null
+  }
+
+  /**
+   * GET /sell/inventory/v1/offer/{offerId}
+   * Tek offer kaydı — fiyat / stok; monitor için EbayActiveListingPriceRow.
+   */
+  async getOfferById(offerId: string): Promise<EbayActiveListingPriceRow | null> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] getOfferById offerId=${offerId}`)
+      return null
+    }
+
+    const clean = offerId?.trim()
+    if (!clean) return null
+
+    const url = `${this.baseUrl}/sell/inventory/v1/offer/${encodeURIComponent(clean)}`
+    const res = await fetch(url, { headers: this.buildJsonHeaders() })
+
+    if (res.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (res.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${url}`)
+    }
+
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`getOfferById failed: HTTP ${res.status} - ${text}`)
+    }
+
+    const data = (await res.json()) as EbayOfferSummary
+    return offerSummaryToActivePriceRow(data)
+  }
+
+  /**
+   * PUT /sell/inventory/v1/offer/{offerId}
+   * Aktif ilan stok miktarı (listing quantity) için offer güncellemesi.
+   */
+  async updateOfferQuantity(offerId: string, quantity: number): Promise<void> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] updateOfferQuantity offerId=${offerId} qty=${quantity}`)
+      return
+    }
+
+    const url = `${this.baseUrl}/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`
+    const res = await fetch(url, {
+      method:  "PUT",
+      headers: this.buildJsonHeaders(),
+      body:    JSON.stringify({ availableQuantity: quantity }),
+    })
+
+    if (res.status === 429) {
+      await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${url}`)
+      throw new Error(`Rate limit: HTTP 429 - ${url}`)
+    }
+    if (res.status >= 500) {
+      await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${url}`)
+    }
+
+    if (res.status !== 200 && res.status !== 204) {
+      const text = await res.text()
+      throw new Error(`updateOfferQuantity failed: HTTP ${res.status} - ${text}`)
+    }
+  }
+
+  /**
+   * Tüm offer listesi — SKU filtresi yok; yalnızca limit & offset.
+   */
+  private offerListUrl(limit: number, offset: number): string {
+    return `${this.baseUrl}/sell/inventory/v1/offer?limit=${limit}&offset=${offset}`
+  }
+
+  /**
+   * eBay `next` href'inden limit/offset okur; sku ve diğer sorgu parametrelerini kullanmaz.
+   */
+  private offerListUrlFromPaginationHref(
+    href: string,
+    fallbackLimit: number,
+    fallbackOffset: number
+  ): string {
+    try {
+      const u = new URL(href, this.baseUrl)
+      if (!u.pathname.endsWith("/sell/inventory/v1/offer")) {
+        return this.offerListUrl(fallbackLimit, fallbackOffset)
+      }
+      const limParsed = Number.parseInt(u.searchParams.get("limit") ?? "", 10)
+      const offParsed = Number.parseInt(u.searchParams.get("offset") ?? "", 10)
+      const lim = Number.isFinite(limParsed) && limParsed > 0 ? limParsed : fallbackLimit
+      const off = Number.isFinite(offParsed) ? offParsed : fallbackOffset
+      return this.offerListUrl(lim, off)
+    } catch {
+      return this.offerListUrl(fallbackLimit, fallbackOffset)
+    }
+  }
+
+  /**
+   * Aktif listeleme fiyat / stok: GET /sell/inventory/v1/offer?limit=100&offset=…
+   * Tüm sayfalar (`next` veya offset + total). Başarısız olursa getInventoryItems yedeği.
    */
   async getActiveListingPrices(): Promise<EbayActiveListingPriceRow[]> {
     if (this.simulationMode) {
@@ -788,52 +906,67 @@ export class EbayApiClient {
     }
 
     try {
-      return await this.fetchPublishedPricesViaListingResource()
+      return await this.fetchPublishedPricesViaOffers()
     } catch (e) {
       console.warn(
-        "[getActiveListingPrices] /listing failed, fallback getInventoryItems:",
+        "[getActiveListingPrices] /offer pagination failed, fallback getInventoryItems:",
         e instanceof Error ? e.message : String(e)
       )
       return await this.fetchPublishedPricesViaInventoryItems()
     }
   }
 
-  private async fetchPublishedPricesViaListingResource(): Promise<EbayActiveListingPriceRow[]> {
-    const limit = 200
+  private async fetchPublishedPricesViaOffers(): Promise<EbayActiveListingPriceRow[]> {
+    const limit   = 100
     const collected: EbayActiveListingPriceRow[] = []
-    let nextUrl: string | undefined =
-      `${this.baseUrl}/sell/inventory/v1/listing?limit=${limit}&offset=0`
+    let nextUrl: string | undefined = this.offerListUrl(limit, 0)
     let pageGuard = 0
 
     while (nextUrl && pageGuard < 500) {
       pageGuard++
+      console.log("[getActiveListingPrices] fetching URL:", nextUrl)
       const res = await fetch(nextUrl, { headers: this.buildJsonHeaders() })
-      if (!res.ok) {
-        const text = await res.text()
-        console.log("[getActiveListingPrices] failed URL:", nextUrl)
-        console.log("[getActiveListingPrices] response text:", text)
-        throw new Error(`getActiveListingPrices listing failed: HTTP ${res.status} - ${text}`)
+      console.log("[getActiveListingPrices] response status:", res.status)
+
+      if (res.status === 429) {
+        await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${nextUrl}`)
+        throw new Error(`Rate limit: HTTP 429 - ${nextUrl}`)
+      }
+      if (res.status >= 500) {
+        await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${nextUrl}`)
       }
 
-      const page = (await res.json()) as Record<string, unknown>
-      const rows = extractListingArrayFromPage(page)
-      for (const row of rows) {
-        const parsed = parseListingEntryToPriceRow(row)
-        if (parsed) collected.push(parsed)
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`getActiveListingPrices offer failed: HTTP ${res.status} - ${text}`)
       }
+
+      const page = (await res.json()) as EbayGetOffersPage
+      for (const o of page.offers ?? []) {
+        const row = offerSummaryToActivePriceRow(o)
+        if (row) collected.push(row)
+      }
+
+      const curOffset = typeof page.offset === "number" ? page.offset : 0
+      const pageLimit = typeof page.limit === "number" && page.limit > 0 ? page.limit : limit
+      const got       = page.offers?.length ?? 0
+      const total     = typeof page.total === "number" ? page.total : 0
 
       if (typeof page.next === "string" && page.next.trim().length > 0) {
         const raw = page.next.startsWith("http") ? page.next : `${this.baseUrl}${page.next}`
-        nextUrl = raw
+        nextUrl = this.offerListUrlFromPaginationHref(raw, pageLimit, curOffset + got)
         continue
       }
 
-      if (rows.length >= limit) {
-        nextUrl = bumpListingPageOffset(nextUrl, limit, this.baseUrl)
-        continue
+      if (got === 0) {
+        nextUrl = undefined
+      } else if (total > 0 && curOffset + got < total) {
+        nextUrl = this.offerListUrl(pageLimit, curOffset + got)
+      } else if (total === 0 && got >= pageLimit) {
+        nextUrl = this.offerListUrl(pageLimit, curOffset + got)
+      } else {
+        nextUrl = undefined
       }
-
-      nextUrl = undefined
     }
 
     return mergeListingPriceRowsBySku(collected)
@@ -918,8 +1051,10 @@ export class EbayApiClient {
       body:    JSON.stringify(body),
     })
 
+    const text = await res.text()
+    console.log(`[eBayClient][updateQuantity] eBay response status=${res.status} body=${text}`)
+
     if (res.status !== 200 && res.status !== 204) {
-      const text = await res.text()
       throw new Error(`updateQuantity failed: HTTP ${res.status} - ${text}`)
     }
   }

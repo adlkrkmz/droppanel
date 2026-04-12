@@ -133,8 +133,12 @@ export async function getAdminStores(
     status:     string
     created_at: string
   }>(
-    `SELECT id, name, store_code, status, created_at::text
-     FROM stores WHERE workspace_id = $1 ORDER BY created_at ASC`,
+    `SELECT s.id, s.name, s.store_code, s.status, s.created_at::text
+     FROM stores s
+     INNER JOIN ebay_accounts ea       ON ea.store_id = s.id AND ea.workspace_id = s.workspace_id
+     WHERE s.workspace_id = $1
+       AND s.status = 'active'
+     ORDER BY s.created_at ASC`,
     [workspaceId]
   )
   const rows: AdminStoreRow[] = result.rows.map(r => ({

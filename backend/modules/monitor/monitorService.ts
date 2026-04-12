@@ -2,7 +2,7 @@
 // monitorService.ts
 //
 // Flow:
-//   1. eBay Inventory API → inventory_items + offers
+//   1. eBay Inventory API → inventory_items (başlık/görsel); fiyat/stok → store_catalog_state (periyodik sync)
 //   2. SKU parse → ASIN çıkar (DP-{ASIN}-{STORE})
 //   3. DB lookup → amazon_product_cache.price = cost
 //   4. Margin = (ebayPrice - cost) / ebayPrice * 100
@@ -15,14 +15,11 @@
 import { query }            from "../../db/client"
 import {
   EbayApiClient,
-  type EbayActiveListingPriceRow,
   type EbayGetInventoryItemsPage,
   type EbayGetOffersPage,
 } from "../ebay/ebayApiClient"
 import type { EbayClientConfig } from "../ebay/ebayApiTypes"
 import type {
-  EbayGetInventoryItemsResponse,
-  EbayGetOffersResponse,
   MonitorItem,
   MonitorListingsResult,
 } from "./monitorTypes"
@@ -189,6 +186,51 @@ function buildDpSku(asin: string, storeCode: string): string {
   return `DP${asin}${storeCode}`.toUpperCase()
 }
 
+type CatalogStateRow = {
+  ebayPrice:          number | null
+  ebayQuantity:       number | null
+  ebayItemId:         string | null
+  ebayTitle:          string | null
+  ebayPriceSyncedAt:  string | null
+}
+
+/** Periyodik sync ile doldurulan store_catalog_state fiyat/stok. */
+async function fetchStoreCatalogStateBySku(
+  workspaceId: string,
+  storeId:     number
+): Promise<Map<string, CatalogStateRow>> {
+  const result = await query<{
+    internal_sku:           string
+    ebay_price:             string | null
+    ebay_quantity:          number | null
+    ebay_item_id:           string | null
+    ebay_title:             string | null
+    ebay_price_synced_at:   string | null
+  }>(
+    `SELECT internal_sku, ebay_price::text, ebay_quantity, ebay_item_id, ebay_title,
+            ebay_price_synced_at::text AS ebay_price_synced_at
+     FROM store_catalog_state
+     WHERE workspace_id = $1 AND store_id = $2`,
+    [workspaceId, storeId]
+  )
+  const m = new Map<string, CatalogStateRow>()
+  for (const r of result.rows) {
+    const sku = r.internal_sku?.trim()
+    if (!sku) continue
+    const ep = r.ebay_price != null && String(r.ebay_price).trim() !== ""
+      ? parseFloat(String(r.ebay_price))
+      : NaN
+    m.set(sku, {
+      ebayPrice:         Number.isFinite(ep) ? ep : null,
+      ebayQuantity:      r.ebay_quantity,
+      ebayItemId:        r.ebay_item_id?.trim() || null,
+      ebayTitle:         r.ebay_title?.trim() || null,
+      ebayPriceSyncedAt: r.ebay_price_synced_at?.trim() || null,
+    })
+  }
+  return m
+}
+
 // ─── EBAY API FETCH ───────────────────────────────────────────
 
 // fetchEbayInventoryItems and fetchEbayOffers handled via EbayApiClient methods
@@ -299,28 +341,28 @@ export async function getMonitorListings(
     ebayInventoryTotal = typeof invRes.total === "number" ? invRes.total : inventoryItems.length
     const invMap = new Map(inventoryItems.map((i: EbayGetInventoryItemsPage["inventoryItems"][0]) => [i.sku, i]))
 
-    // 3) Fiyat / listingId / stok — hata olursa sessizce boş (fiyat 0)
-    let publishedRows: EbayActiveListingPriceRow[] = []
-    try {
-      publishedRows = await apiClient.getActiveListingPrices()
-    } catch {
-      publishedRows = []
-    }
+    const catalogBySku = await fetchStoreCatalogStateBySku(workspaceId, store.id)
+
+    // 3) Fiyat / listingId / stok — store_catalog_state (periyodik eBay sync)
     const offerMap = new Map<string, EbayGetOffersPage["offers"][0]>()
     const priceBySku = new Map<string, number>()
-    for (const r of publishedRows) {
-      priceBySku.set(r.sku, r.price)
-      offerMap.set(r.sku, {
-        sku:               r.sku,
-        offerId:           r.offerId,
-        pricingSummary:    { price: { value: String(r.price), currency: r.currency } },
-        availableQuantity: r.availableQuantity,
-        listing:           r.listingId ? { listingId: r.listingId } : undefined,
-        status:            "PUBLISHED",
+    for (const [sku, cat] of catalogBySku) {
+      if (cat.ebayPrice != null && Number.isFinite(cat.ebayPrice)) {
+        priceBySku.set(sku, cat.ebayPrice)
+      }
+      offerMap.set(sku, {
+        sku,
+        offerId:           "",
+        pricingSummary:    cat.ebayPrice != null
+          ? { price: { value: String(cat.ebayPrice), currency: "USD" } }
+          : undefined,
+        availableQuantity: cat.ebayQuantity ?? 0,
+        listing:           cat.ebayItemId ? { listingId: cat.ebayItemId } : undefined,
+        status:              "PUBLISHED",
       })
     }
 
-    skus = [...new Set([...assignedSkus, ...invMap.keys(), ...offerMap.keys()])] as string[]
+    skus = [...new Set([...assignedSkus, ...invMap.keys(), ...catalogBySku.keys()])] as string[]
     priceMap = new Map()
     titleMap = new Map()
     qtyMap   = new Map()
@@ -329,17 +371,21 @@ export async function getMonitorListings(
     for (const sku of skus) {
       const inv   = invMap.get(sku)
       const offer = offerMap.get(sku)
+      const cat   = catalogBySku.get(sku)
 
       const priceStr = offer?.pricingSummary?.price?.value
       priceMap.set(
         sku,
         priceBySku.has(sku) ? priceBySku.get(sku)! : (priceStr ? parseFloat(priceStr) : 0)
       )
-      titleMap.set(sku, inv?.product?.title ?? "")
-      qtyMap.set(sku, offer?.availableQuantity ?? inv?.availability?.shipToLocationAvailability?.quantity ?? 0)
+      titleMap.set(sku, cat?.ebayTitle ?? inv?.product?.title ?? "")
+      qtyMap.set(
+        sku,
+        cat?.ebayQuantity ?? offer?.availableQuantity ?? inv?.availability?.shipToLocationAvailability?.quantity ?? 0
+      )
       imageMap.set(sku, inv?.product?.imageUrls?.[0] ?? null)
 
-      const lid = offer?.listing?.listingId?.trim()
+      const lid = cat?.ebayItemId ?? offer?.listing?.listingId?.trim()
       if (lid) listingIdBySku.set(sku, lid)
     }
   }
