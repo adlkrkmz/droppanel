@@ -222,8 +222,9 @@ function EbayConnectSection({
   }
 
   async function handleDisconnect() {
+    const displayName = status?.storeName?.trim() || storeCode
     const ok = window.confirm(
-      `Remove store ${storeCode} and disconnect eBay? This deletes the store and its eBay link.`
+      `Remove store ${displayName} and disconnect eBay? This deletes the store and its eBay link.`
     )
     if (!ok) return
 
@@ -830,7 +831,7 @@ export default function SettingsPage() {
                     background: selectedStore === s.storeCode ? "var(--accent)" : "transparent",
                     color: selectedStore === s.storeCode ? "#000" : "var(--sub)",
                   }}
-                  title={`${s.storeCode}${tabLabel !== s.storeCode ? ` — ${tabLabel}` : ""}`}
+                  title={tabLabel}
                 >
                   {tabLabel}
                 </button>

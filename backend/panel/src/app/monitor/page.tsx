@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { getMonitorListings, postMonitorUpdatePrice, postMonitorUpdateStock, postMonitorBlind } from "@/lib/api"
-import type { MonitorItem } from "@/lib/api"
+import { getMonitorListings, getStores, postMonitorUpdatePrice, postMonitorUpdateStock, postMonitorBlind } from "@/lib/api"
+import type { MonitorItem, StoreRow } from "@/lib/api"
 import { useStore } from "@/lib/storeContext"
 import { useToast } from "@/lib/toastContext"
 
@@ -505,6 +505,7 @@ function ProductCard({ item, onEdit, onBlind, onSync, onDetail, selectMode, sele
 export default function MonitorPage() {
   const { selectedStore } = useStore()
   const { showToast } = useToast()
+  const [stores, setStores] = useState<StoreRow[]>([])
   const [items, setItems]     = useState<MonitorItem[]>([])
   const [stats,     setStats]     = useState({
     ebayInventoryTotal: 0,
@@ -531,6 +532,17 @@ export default function MonitorPage() {
 
   const kpiBlind = useMemo(() => items.filter(i => i.quantity === 0).length, [items])
   const kpiError = useMemo(() => items.filter(isErrorItem).length, [items])
+
+  const selectedStoreDisplayName = useMemo(
+    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || selectedStore,
+    [stores, selectedStore]
+  )
+
+  useEffect(() => {
+    void getStores()
+      .then((d) => setStores(d.rows ?? []))
+      .catch(() => setStores([]))
+  }, [])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -723,6 +735,18 @@ export default function MonitorPage() {
 
   return (
     <div style={{ maxWidth: "1200px", animation: "fade-in 0.3s ease forwards" }}>
+
+      <p
+        style={{
+          marginBottom: "12px",
+          fontSize: "12px",
+          fontFamily: "'JetBrains Mono', monospace",
+          color: "var(--sub)",
+        }}
+      >
+        Store:{" "}
+        <span style={{ color: "var(--text)", fontWeight: 700 }}>{selectedStoreDisplayName}</span>
+      </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px", marginBottom: "20px" }}>
         {[
@@ -925,7 +949,9 @@ export default function MonitorPage() {
         </div>
       ) : displayItems.length === 0 ? (
         <div style={{ padding: "48px", textAlign: "center", color: "var(--dim)", fontFamily: "'JetBrains Mono', monospace" }}>
-          {items.length === 0 ? "No listings found for this store" : "No results match your filter"}
+          {items.length === 0
+            ? `No listings found for ${selectedStoreDisplayName}`
+            : "No results match your filter"}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px" }}>

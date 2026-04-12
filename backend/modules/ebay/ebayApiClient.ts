@@ -11,6 +11,7 @@
 // Taxonomy: GET /commerce/taxonomy/v1/category_tree/0/get_category_suggestions
 // Offer:    PUT /sell/inventory/v1/offer/{offerId} (updateOffer)
 // Offers:   GET /sell/inventory/v1/offer (fiyat + stok — getActiveListingPrices)
+// Trading:  POST .../ws/api.dll GetMyeBaySelling (XML — getAllOffersForImportBulk yedeği)
 // ----------------------------------------------------------------
 
 import type {
@@ -28,6 +29,9 @@ const EBAY_PRODUCTION_BASE = "https://api.ebay.com"
 const EBAY_SANDBOX_BASE    = "https://api.sandbox.ebay.com"
 const EBAY_MEDIA_APIM_PROD = "https://apim.ebay.com"
 const EBAY_MEDIA_APIM_SB   = "https://apim.sandbox.ebay.com"
+/** Trading API (XML) — GetMyeBaySelling vb. */
+const EBAY_TRADING_DLL_PROD = "https://api.ebay.com/ws/api.dll"
+const EBAY_TRADING_DLL_SB   = "https://api.sandbox.ebay.com/ws/api.dll"
 
 /** Taxonomy öneri yok / hata → createOffer categoryId yedek */
 export const EBAY_DEFAULT_CATEGORY_ID = "9355"
@@ -203,6 +207,24 @@ function offerSummaryToActivePriceRow(o: EbayOfferSummary): EbayActiveListingPri
   }
 }
 
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function xmlTextContent(block: string, tag: string): string {
+  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "i")
+  const m = re.exec(block)
+  if (!m) return ""
+  let inner = m[1].trim()
+  const cdata = /^<!\[CDATA\[([\s\S]*?)\]\]>$/i.exec(inner)
+  if (cdata) inner = cdata[1].trim()
+  return inner.replace(/<[^>]+>/g, "").trim()
+}
+
 function mergeListingPriceRowsBySku(rows: EbayActiveListingPriceRow[]): EbayActiveListingPriceRow[] {
   const m = new Map<string, EbayActiveListingPriceRow>()
   for (const row of rows) {
@@ -245,11 +267,13 @@ export class EbayApiClient {
   private readonly mediaApimBase:  string
   private readonly oauthToken:     string
   private readonly simulationMode: boolean
+  private readonly isSandbox:      boolean
 
   constructor(config: EbayClientConfig) {
     this.oauthToken     = config.oauthToken
     this.simulationMode = config.simulationMode ?? false
     const sandbox       = config.sandbox ?? false
+    this.isSandbox      = sandbox
     this.baseUrl        = sandbox ? EBAY_SANDBOX_BASE : EBAY_PRODUCTION_BASE
     this.mediaApimBase  = sandbox ? EBAY_MEDIA_APIM_SB : EBAY_MEDIA_APIM_PROD
   }
@@ -395,6 +419,69 @@ export class EbayApiClient {
       limit,
       offset,
     }
+  }
+
+  /**
+   * GET /sell/inventory/v1/inventory_item?limit=100&offset=… — tüm sayfalar.
+   * `getInventoryItems` ile aynı endpoint; 1000 kayıt üst sınırı yok (import / tam liste için).
+   */
+  async getAllInventoryItemsPaginated(): Promise<EbayGetInventoryItemsPage["inventoryItems"]> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] getAllInventoryItemsPaginated -> []`)
+      return []
+    }
+
+    const limit         = 100
+    const allItems: EbayGetInventoryItemsPage["inventoryItems"] = []
+    let nextUrl: string | undefined =
+      `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${limit}&offset=0`
+    let pageGuard = 0
+
+    while (nextUrl && pageGuard < 500) {
+      pageGuard++
+      const res = await fetch(nextUrl, { headers: this.buildJsonHeaders() })
+
+      if (res.status === 429) {
+        await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${nextUrl}`)
+        throw new Error(`Rate limit: HTTP 429 - ${nextUrl}`)
+      }
+      if (res.status >= 500) {
+        await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${nextUrl}`)
+      }
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`getAllInventoryItemsPaginated failed: HTTP ${res.status} - ${text}`)
+      }
+
+      const page = (await res.json()) as EbayGetInventoryItemsPage
+      allItems.push(...(page.inventoryItems ?? []))
+
+      const curOffset = typeof page.offset === "number" ? page.offset : 0
+      const pageLimit = typeof page.limit === "number" && page.limit > 0 ? page.limit : limit
+      const got       = page.inventoryItems?.length ?? 0
+      const total     = typeof page.total === "number" ? page.total : 0
+
+      if (typeof page.next === "string" && page.next.trim().length > 0) {
+        const raw = page.next.startsWith("http") ? page.next : `${this.baseUrl}${page.next}`
+        nextUrl = raw
+        continue
+      }
+
+      if (got === 0) {
+        nextUrl = undefined
+      } else if (total > 0 && curOffset + got < total) {
+        nextUrl =
+          `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${pageLimit}&offset=${curOffset + got}`
+      } else if (total === 0 && got >= pageLimit) {
+        nextUrl =
+          `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${pageLimit}&offset=${curOffset + got}`
+      } else {
+        nextUrl = undefined
+      }
+    }
+
+    return allItems
   }
 
   // ----------------------------------------------------------------
@@ -896,6 +983,194 @@ export class EbayApiClient {
   }
 
   /**
+   * importExistingEbayListings için toplu çekim:
+   * 1) GET /sell/inventory/v1/offer?limit=100&offset=… (SKU parametresi yok)
+   * 2) İlk istek HTTP 400 dönerse (ör. invalid SKU) → Trading GetMyeBaySelling
+   */
+  async getAllOffersForImportBulk(): Promise<EbayActiveListingPriceRow[]> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] getAllOffersForImportBulk -> []`)
+      return []
+    }
+
+    const limit   = 100
+    const collected: EbayActiveListingPriceRow[] = []
+    let nextUrl: string | undefined = this.offerListUrl(limit, 0)
+    let pageGuard   = 0
+    let isFirstPage = true
+
+    while (nextUrl && pageGuard < 500) {
+      pageGuard++
+      const res = await fetch(nextUrl, { headers: this.buildJsonHeaders() })
+
+      if (res.status === 429) {
+        await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${nextUrl}`)
+        throw new Error(`Rate limit: HTTP 429 - ${nextUrl}`)
+      }
+      if (res.status >= 500) {
+        await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${nextUrl}`)
+      }
+
+      if (res.status === 400 && isFirstPage) {
+        const text = await res.text()
+        console.warn(
+          "[getAllOffersForImportBulk] GET /sell/inventory/v1/offer HTTP 400 → GetMyeBaySelling:",
+          text.slice(0, 280)
+        )
+        return await this.fetchGetMyeBaySellingAllPages()
+      }
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`getAllOffersForImportBulk failed: HTTP ${res.status} - ${text}`)
+      }
+
+      isFirstPage = false
+      const page = (await res.json()) as EbayGetOffersPage
+      for (const o of page.offers ?? []) {
+        const row = offerSummaryToActivePriceRow(o)
+        if (row) collected.push(row)
+      }
+
+      const curOffset = typeof page.offset === "number" ? page.offset : 0
+      const pageLimit = typeof page.limit === "number" && page.limit > 0 ? page.limit : limit
+      const got       = page.offers?.length ?? 0
+      const total     = typeof page.total === "number" ? page.total : 0
+
+      if (typeof page.next === "string" && page.next.trim().length > 0) {
+        const raw = page.next.startsWith("http") ? page.next : `${this.baseUrl}${page.next}`
+        nextUrl = this.offerListUrlFromPaginationHref(raw, pageLimit, curOffset + got)
+        continue
+      }
+
+      if (got === 0) {
+        nextUrl = undefined
+      } else if (total > 0 && curOffset + got < total) {
+        nextUrl = this.offerListUrl(pageLimit, curOffset + got)
+      } else if (total === 0 && got >= pageLimit) {
+        nextUrl = this.offerListUrl(pageLimit, curOffset + got)
+      } else {
+        nextUrl = undefined
+      }
+    }
+
+    return collected
+  }
+
+  private buildGetMyeBaySellingXml(pageNumber: number): string {
+    const token = escapeXml(this.oauthToken)
+    return (
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">` +
+      `<RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>` +
+      `<DetailLevel>ReturnAll</DetailLevel>` +
+      `<ActiveList><Include>true</Include>` +
+      `<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${pageNumber}</PageNumber></Pagination>` +
+      `</ActiveList></GetMyeBaySellingRequest>`
+    )
+  }
+
+  private parseTradingActiveItems(xml: string): EbayActiveListingPriceRow[] {
+    const rows: EbayActiveListingPriceRow[] = []
+    const listStart = xml.indexOf("<ItemArray>")
+    const listEnd   = xml.indexOf("</ItemArray>")
+    const slice =
+      listStart >= 0 && listEnd > listStart
+        ? xml.slice(listStart, listEnd + "</ItemArray>".length)
+        : xml
+
+    const itemRe = /<Item>([\s\S]*?)<\/Item>/gi
+    let m: RegExpExecArray | null
+    while ((m = itemRe.exec(slice)) !== null) {
+      const block   = m[1]
+      const itemId  = xmlTextContent(block, "ItemID")
+      let sku       = xmlTextContent(block, "SKU")
+      if (!sku) sku = xmlTextContent(block, "CustomLabel")
+      const skuFinal = (sku || itemId || "").trim()
+      if (!skuFinal) continue
+
+      const curFull = block.match(
+        /<CurrentPrice\s+[^>]*currencyID="([^"]+)"[^>]*>([\d.]+)<\/CurrentPrice>/i
+      )
+      const curSimple = block.match(/<CurrentPrice[^>]*>([\d.]+)<\/CurrentPrice>/i)
+      const currency  = curFull?.[1] ?? "USD"
+      const priceRaw  = curFull?.[2] ?? curSimple?.[1] ?? "0"
+      const price     = parseFloat(priceRaw)
+
+      const qAvail = xmlTextContent(block, "QuantityAvailable")
+      const qTot   = xmlTextContent(block, "Quantity")
+      const qStr   = qAvail || qTot
+      const qty    = qStr ? (parseInt(qStr, 10) || parseFloat(qStr) || 0) : 0
+
+      rows.push({
+        sku:               skuFinal,
+        price:             Number.isFinite(price) ? price : 0,
+        offerId:           "",
+        listingId:         itemId.trim() || null,
+        availableQuantity: qty,
+        currency,
+        offerStatus:       null,
+      })
+    }
+
+    return rows
+  }
+
+  private async fetchGetMyeBaySellingAllPages(): Promise<EbayActiveListingPriceRow[]> {
+    const tradingUrl = this.isSandbox ? EBAY_TRADING_DLL_SB : EBAY_TRADING_DLL_PROD
+    const collected: EbayActiveListingPriceRow[] = []
+    const siteId = (process.env.EBAY_SITE_ID ?? "0").trim()
+
+    for (let pageNum = 1; pageNum <= 500; pageNum++) {
+      const body = this.buildGetMyeBaySellingXml(pageNum)
+      const res  = await fetch(tradingUrl, {
+        method:  "POST",
+        headers: {
+          "Content-Type":                 "text/xml",
+          "X-EBAY-API-CALL-NAME":         "GetMyeBaySelling",
+          "X-EBAY-API-SITEID":            siteId,
+          "X-EBAY-API-COMPATIBILITY-LEVEL": "1225",
+        },
+        body,
+      })
+
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(`Trading GetMyeBaySelling HTTP ${res.status}: ${t.slice(0, 400)}`)
+      }
+
+      const xml = await res.text()
+      if (!/<Ack>(Success|Warning)<\/Ack>/i.test(xml)) {
+        const short =
+          xml.match(/<ShortMessage>([^<]*)<\/ShortMessage>/i)?.[1]?.trim() ??
+          xml.match(/<LongMessage>([^<]*)<\/LongMessage>/i)?.[1]?.trim() ??
+          xml.slice(0, 300)
+        throw new Error(`GetMyeBaySelling failed: ${short}`)
+      }
+
+      const pageRows = this.parseTradingActiveItems(xml)
+      const totalPages = parseInt(
+        xml.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/i)?.[1] || "1",
+        10
+      )
+      const totalEntries =
+        xml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/i)?.[1]
+
+      console.log(`[Trading] page=${pageNum} rows=${pageRows.length}`)
+      console.log(`[Trading] totalPages=${totalPages} totalEntries=${totalEntries}`)
+
+      if (pageRows.length === 0 && pageNum > 1) break
+
+      collected.push(...pageRows)
+
+      if (pageNum >= totalPages) break
+    }
+
+    console.log(`[getAllOffersForImportBulk] Trading API rows=${collected.length}`)
+    return collected
+  }
+
+  /**
    * Aktif listeleme fiyat / stok: GET /sell/inventory/v1/offer?limit=100&offset=…
    * Tüm sayfalar (`next` veya offset + total). Başarısız olursa getInventoryItems yedeği.
    */
@@ -914,6 +1189,82 @@ export class EbayApiClient {
       )
       return await this.fetchPublishedPricesViaInventoryItems()
     }
+  }
+
+  /**
+   * GET /sell/inventory/v1/inventory_item?limit=100&offset=… — tüm sayfalar (SKU birleştirmez).
+   * SKU gerektirmez; her item: sku, product.title, availability.shipToLocationAvailability.quantity
+   * (+ varsa kayıttaki fiyat / offerId / listingId alanları).
+   * `publishedOnly`: true ise yalnızca listingId veya offerId dolu satırlar (envanter listesinde genelde yoktur; varsayılan false).
+   */
+  async getAllOffersPaginated(options?: { publishedOnly?: boolean }): Promise<EbayActiveListingPriceRow[]> {
+    if (this.simulationMode) {
+      console.log(`    [eBayClient][SIM] getAllOffersPaginated -> []`)
+      return []
+    }
+
+    const publishedOnly = options?.publishedOnly ?? false
+    const limit         = 100
+    const collected: EbayActiveListingPriceRow[] = []
+    let nextUrl: string | undefined =
+      `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${limit}&offset=0`
+    let pageGuard = 0
+
+    while (nextUrl && pageGuard < 500) {
+      pageGuard++
+      const res = await fetch(nextUrl, { headers: this.buildJsonHeaders() })
+
+      if (res.status === 429) {
+        await alertRateLimit("eBay API", `Rate limit aşıldı. URL: ${nextUrl}`)
+        throw new Error(`Rate limit: HTTP 429 - ${nextUrl}`)
+      }
+      if (res.status >= 500) {
+        await alertRateLimit("eBay API", `eBay sunucu hatası HTTP ${res.status}. URL: ${nextUrl}`)
+      }
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`getAllOffersPaginated failed: HTTP ${res.status} - ${text}`)
+      }
+
+      const page = (await res.json()) as EbayGetInventoryItemsPage
+      for (const item of page.inventoryItems ?? []) {
+        const row = inventoryItemToActivePriceRow(item)
+        if (!row) continue
+        if (publishedOnly) {
+          const published =
+            (row.listingId != null && String(row.listingId).trim().length > 0) ||
+            (row.offerId != null && String(row.offerId).trim().length > 0)
+          if (!published) continue
+        }
+        collected.push(row)
+      }
+
+      const curOffset = typeof page.offset === "number" ? page.offset : 0
+      const pageLimit = typeof page.limit === "number" && page.limit > 0 ? page.limit : limit
+      const got       = page.inventoryItems?.length ?? 0
+      const total     = typeof page.total === "number" ? page.total : 0
+
+      if (typeof page.next === "string" && page.next.trim().length > 0) {
+        const raw = page.next.startsWith("http") ? page.next : `${this.baseUrl}${page.next}`
+        nextUrl = raw
+        continue
+      }
+
+      if (got === 0) {
+        nextUrl = undefined
+      } else if (total > 0 && curOffset + got < total) {
+        nextUrl =
+          `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${pageLimit}&offset=${curOffset + got}`
+      } else if (total === 0 && got >= pageLimit) {
+        nextUrl =
+          `${this.baseUrl}/sell/inventory/v1/inventory_item?limit=${pageLimit}&offset=${curOffset + got}`
+      } else {
+        nextUrl = undefined
+      }
+    }
+
+    return collected
   }
 
   private async fetchPublishedPricesViaOffers(): Promise<EbayActiveListingPriceRow[]> {

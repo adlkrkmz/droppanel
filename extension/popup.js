@@ -76,7 +76,7 @@
       for (const s of rows) {
         const opt = document.createElement('option');
         opt.value = s.storeCode;
-        opt.textContent = `${s.name} (${s.storeCode})`;
+        opt.textContent = (s.name && String(s.name).trim()) ? String(s.name).trim() : s.storeCode;
         sel.appendChild(opt);
       }
     };

@@ -123,7 +123,9 @@ export default function Topbar() {
   const activeStores = stores.filter((s) => s.status === "active")
   const storeOptions = activeStores.length > 0 ? activeStores : stores
   const selectedOption = storeOptions.find((s) => s.storeCode === selectedStore)
-  const selectedLabel = selectedOption ? `${selectedOption.name} (${selectedOption.storeCode})` : selectedStore
+  const selectedLabel = selectedOption
+    ? (selectedOption.name?.trim() || selectedOption.storeCode)
+    : selectedStore
 
   const unreadCount = persisted.filter((n) => !n.read).length
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { deletePoolItems, getPool, getStores } from "@/lib/api"
 import type { PoolRow, PoolResult, StoreRow } from "@/lib/api"
 import { useStore } from "@/lib/storeContext"
@@ -39,6 +39,12 @@ function Badge({ value, color }: { value: string; color: string }) {
       {value}
     </span>
   )
+}
+
+function poolStoreDisplayName(stores: StoreRow[], code: string | null | undefined): string {
+  if (code == null || String(code).trim() === "") return "—"
+  const row = stores.find((s) => s.storeCode === code)
+  return row?.name?.trim() || String(code)
 }
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
@@ -108,6 +114,11 @@ export default function PoolPage() {
   const [selectedPoolIds, setSelectedPoolIds] = useState<Set<number>>(new Set())
   const [publishQuantityByPoolId, setPublishQuantityByPoolId] = useState<Record<number, number>>({})
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const selectedStoreDisplayLabel = useMemo(
+    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || selectedStore,
+    [stores, selectedStore]
+  )
 
   // ─── Dispatch Selected (new) ───────────────────────────────
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false)
@@ -520,7 +531,7 @@ export default function PoolPage() {
           Quick Dispatch
         </div>
         <p style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--sub)", marginBottom: 10 }}>
-          Store: {selectedStore}
+          Store: {selectedStoreDisplayLabel}
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "0.6fr 0.7fr 0.7fr auto", gap: 10, alignItems: "end" }}>
@@ -646,7 +657,11 @@ export default function PoolPage() {
             style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "3px", padding: "5px 10px", color: "var(--text)", fontSize: "11px", fontFamily: "'JetBrains Mono', monospace" }}
           >
             <option value="all">All Stores</option>
-            {stores.map(s => <option key={s.id} value={s.storeCode}>{s.name} ({s.storeCode})</option>)}
+            {stores.map((s) => (
+              <option key={s.id} value={s.storeCode}>
+                {s.name?.trim() || s.storeCode}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -790,9 +805,9 @@ export default function PoolPage() {
                         maxWidth: 90,
                       }}
                     >
-                      {stores.map(s => (
+                      {stores.map((s) => (
                         <option key={s.id} value={s.storeCode}>
-                          {s.storeCode}
+                          {s.name?.trim() || s.storeCode}
                         </option>
                       ))}
                     </select>
@@ -831,7 +846,7 @@ export default function PoolPage() {
                 )}
               </div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: row.assignedStoreCode ? "var(--info)" : "var(--dim)", display: "flex", alignItems: "center" }}>
-                {row.assignedStoreCode ?? "—"}
+                {poolStoreDisplayName(stores, row.assignedStoreCode)}
               </div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "var(--dim)", display: "flex", alignItems: "center" }}>
                 {row.updatedAt ? row.updatedAt.slice(0, 16).replace("T", " ") : "—"}
@@ -936,7 +951,7 @@ export default function PoolPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <p style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "var(--sub)" }}>
-                Store: {selectedStore}
+                Store: {selectedStoreDisplayLabel}
               </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
