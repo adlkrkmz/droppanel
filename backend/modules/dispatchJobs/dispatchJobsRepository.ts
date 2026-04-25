@@ -152,8 +152,10 @@ export async function claimNextJob(
        FROM dispatch_jobs
        WHERE workspace_id = $1
          AND ($2::text IS NULL OR store_code = $2)
-         AND status = 'pending'
-         AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+         AND (
+           (status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= NOW()))
+           OR (status = 'retry_waiting' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
+         )
        ORDER BY RANDOM()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
@@ -197,16 +199,18 @@ export async function reportJobProgress(
   status: DispatchJobRow["status"],
   error?: string,
   failedStage?: NonNullable<DispatchJobRow["failed_stage"]>,
-  permanent?: boolean
+  permanent?: boolean,
+  /** Retry eşiği: null ise satırdaki max_attempts kullanılır (CAPTURE/scrape için 2 geçilebilir). */
+  effectiveMaxAttempts?: number | null
 ): Promise<DispatchJobRow | null> {
-  // permanent=true → retry_waiting atlanır, direkt failed yazılır, next_retry_at NULL kalır
+  // permanent=true → retry_waiting atlanır, direkt failed; effectiveMaxAttempts ile CAPTURE 2 deneme vb.
   const result = await query<DispatchJobRow>(
     `UPDATE dispatch_jobs j
      SET
        status = CASE
          WHEN $2::dispatch_job_status = 'failed'
            AND NOT ($5::boolean)
-           AND (j.attempt_count + 1) < j.max_attempts
+           AND (j.attempt_count + 1) < COALESCE($6::int, j.max_attempts)
          THEN 'retry_waiting'::dispatch_job_status
          ELSE $2::dispatch_job_status
        END,
@@ -225,9 +229,17 @@ export async function reportJobProgress(
        next_retry_at = CASE
          WHEN $2::dispatch_job_status = 'failed'
            AND NOT ($5::boolean)
-           AND (j.attempt_count + 1) < j.max_attempts
+           AND (j.attempt_count + 1) < COALESCE($6::int, j.max_attempts)
          THEN NOW() + interval '2 minutes'
          ELSE NULL
+       END,
+       worker_id = CASE
+         WHEN $2::dispatch_job_status = 'failed' THEN NULL
+         ELSE j.worker_id
+       END,
+       claimed_at = CASE
+         WHEN $2::dispatch_job_status = 'failed' THEN NULL
+         ELSE j.claimed_at
        END,
        completed_at = CASE
          WHEN $2::dispatch_job_status = 'listing_done' THEN NOW()
@@ -240,7 +252,7 @@ export async function reportJobProgress(
        j.quantity, j.delay_seconds, j.attempt_count, j.max_attempts, j.last_error, j.failed_stage,
        j.worker_id, j.claimed_at::text, j.started_at::text, j.completed_at::text, j.next_retry_at::text,
        j.created_at::text, j.updated_at::text`,
-    [jobId, status, error ?? null, failedStage ?? null, permanent ?? false]
+    [jobId, status, error ?? null, failedStage ?? null, permanent ?? false, effectiveMaxAttempts ?? null]
   )
 
   return result.rows[0] ?? null
@@ -251,10 +263,9 @@ export async function updateRunCounters(runId: number): Promise<DispatchRunRow |
     `WITH stats AS (
        SELECT
          COUNT(*) FILTER (WHERE status = 'listing_done') AS completed_jobs,
-         COUNT(*) FILTER (WHERE status = 'failed' AND attempt_count >= max_attempts) AS failed_jobs,
+         COUNT(*) FILTER (WHERE status = 'failed') AS failed_jobs,
          COUNT(*) FILTER (
           WHERE status NOT IN ('listing_done', 'failed', 'cancelled')
-          OR (status = 'failed' AND attempt_count < max_attempts)
         ) AS active_jobs,
          COUNT(*) AS total_jobs
        FROM dispatch_jobs

@@ -7,6 +7,7 @@ import { importAsins }             from "../asinImport/asinImportService"
 import { getMonitorListings }      from "../monitor/monitorService"
 import {
   updatePrice, updateStock, blindListing,
+  updateSourceUrl,
 }                                    from "../monitorActions/monitorActionsService"
 import type {
   UpdatePriceRequest, UpdatePriceResponse,
@@ -133,7 +134,7 @@ export async function handlePostCreateStore(req: AdminRequest): Promise<AdminRes
        LIMIT 1`,
       [workspaceId, storeCode]
     )
-    if (existing.rows.length > 0) return bad(`Store already exists for storeCode="${storeCode}"`)
+    if (existing.rows.length > 0) return bad("This store code is already in use.")
 
     const result = await query<{
       id: number
@@ -492,7 +493,11 @@ export async function handlePostDispatchJobReport(
   req: AdminRequest
 ): Promise<AdminResponse<{ ok: true }>> {
   try {
-    const body = req.body as Partial<ReportJobRequest> & { jobId?: number; workerId?: string; status?: string }
+    const body = req.body as Partial<ReportJobRequest> & {
+      jobId?: number
+      workerId?: string
+      status?: string
+    }
     const jobId = body.jobId
     if (!Number.isInteger(jobId) || (jobId as number) < 1) return bad("jobId must be an integer >= 1")
     if (!body.workerId || String(body.workerId).trim() === "") return bad("workerId is required")
@@ -503,7 +508,8 @@ export async function handlePostDispatchJobReport(
       String(body.workerId).trim(),
       body.status as ReportJobRequest["status"],
       body.error !== undefined ? String(body.error) : undefined,
-      body.failedStage as ReportJobRequest["failedStage"]
+      body.failedStage as ReportJobRequest["failedStage"],
+      body.failureKind
     )
 
     return { status: 200, body: { ok: true } }
@@ -577,15 +583,7 @@ export async function handleGetMonitorListings(req: AdminRequest): Promise<Admin
     const offsetParam = req.query["offset"]
     const limit       = limitParam !== undefined ? Math.max(1, Math.min(200, parseInt(String(limitParam), 10) || 50)) : 50
     const offset      = offsetParam !== undefined ? Math.max(0, parseInt(String(offsetParam), 10) || 0) : 0
-    const simulation  = (process.env.EBAY_SIMULATION ?? "true") !== "false"
-    const sandbox     = (process.env.EBAY_SANDBOX ?? "true") !== "false"
-    const oauthToken  = await getValidAccessToken(workspaceId, storeCode, simulation)
-    console.log(`[Monitor] handleGetMonitorListings: store=${storeCode} simulation=${simulation} sandbox=${sandbox} tokenPrefix=${oauthToken.slice(0, 20)}`)
-    const result = await getMonitorListings(workspaceId, storeCode, {
-      oauthToken,
-      sandbox,
-      simulationMode: simulation,
-    }, offset, limit)
+    const result = await getMonitorListings(workspaceId, storeCode, offset, limit)
     return { status: 200, body: result }
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
 }
@@ -680,7 +678,7 @@ export async function handlePostEbayDisconnect(
       [workspaceId, storeCode]
     )
        const storeId = storeRes.rows[0]?.id
-    if (!storeId) return bad(`Store not found for storeCode="${storeCode}"`)
+    if (!storeId) return bad("Store not found")
 
     await query(
       `DELETE FROM ebay_accounts
@@ -720,6 +718,18 @@ export async function handlePostMonitorUpdateStock(req: AdminRequest): Promise<A
     const simulation = (process.env.EBAY_SIMULATION ?? "true") !== "false"
     const sandbox    = (process.env.EBAY_SANDBOX    ?? "true") !== "false"
     return { status: 200, body: await updateStock(workspaceId, body as UpdateStockRequest, simulation, sandbox) }
+  } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
+}
+
+export async function handlePostMonitorUpdateSourceUrl(req: AdminRequest): Promise<AdminResponse<{ ok: boolean }>> {
+  try {
+    const workspaceId = getWorkspaceId()
+    const body = req.body as { storeCode?: string; sku?: string; sourceUrl?: string }
+    if (!body.storeCode) return bad("storeCode is required")
+    if (!body.sku)       return bad("sku is required")
+    if (!body.sourceUrl) return bad("sourceUrl is required")
+    await updateSourceUrl(workspaceId, body.sku, body.sourceUrl)
+    return { status: 200, body: { ok: true } }
   } catch (e) { console.error("[ADMIN]", e); return err(e instanceof Error ? e.message : String(e)) }
 }
 
@@ -886,9 +896,10 @@ export const adminRouteMap = [
   { method: "GET",  path: "/admin/ebay/accounts",            handler: handleGetEbayAccounts       },
   { method: "POST", path: "/admin/ebay/refresh",             handler: handlePostEbayRefresh       },
   { method: "POST", path: "/admin/ebay/disconnect",          handler: handlePostEbayDisconnect  },
-  { method: "POST", path: "/admin/monitor/update-price",    handler: handlePostMonitorUpdatePrice },
-  { method: "POST", path: "/admin/monitor/update-stock",    handler: handlePostMonitorUpdateStock },
-  { method: "POST", path: "/admin/monitor/blind",           handler: handlePostMonitorBlind       },
+  { method: "POST", path: "/admin/monitor/update-price",      handler: handlePostMonitorUpdatePrice },
+  { method: "POST", path: "/admin/monitor/update-stock",      handler: handlePostMonitorUpdateStock },
+  { method: "POST", path: "/admin/monitor/update-source-url", handler: handlePostMonitorUpdateSourceUrl },
+  { method: "POST", path: "/admin/monitor/blind",             handler: handlePostMonitorBlind       },
   { method: "GET",  path: "/admin/monitor/listings",      handler: handleGetMonitorListings },
   { method: "POST", path: "/admin/asins/import",           handler: handlePostAsinImport    },
   { method: "POST", path: "/admin/product/extract",        handler: handlePostProductExtract },

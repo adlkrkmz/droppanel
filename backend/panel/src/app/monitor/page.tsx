@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { getMonitorListings, getStores, postMonitorUpdatePrice, postMonitorUpdateStock, postMonitorBlind } from "@/lib/api"
+import { getMonitorListings, getStores, postMonitorUpdatePrice, postMonitorUpdateStock, postMonitorBlind, postMonitorUpdateSourceUrl } from "@/lib/api"
 import type { MonitorItem, StoreRow } from "@/lib/api"
 import { useStore } from "@/lib/storeContext"
 import { useToast } from "@/lib/toastContext"
@@ -24,7 +24,7 @@ function hasValidCost(item: MonitorItem): boolean {
 function isErrorItem(item: MonitorItem): boolean {
   if (!Number.isFinite(item.quantity)) return true
   if (!hasValidPrice(item)) return true
-  if (item.status === "TRACKED" && !item.ebayItemId?.trim()) return true
+  if (item.isTracked && !item.ebayItemId?.trim()) return true
   return false
 }
 
@@ -68,6 +68,40 @@ function formatIso(iso: string | null): string {
   }
 }
 
+function buildSourceUrl(asin: string | null | undefined): string | null {
+  if (!asin?.trim()) return null
+  const a = asin.trim()
+  const numericPart = a.replace(/^(DPALI|ALI|DPTEMU|TEMU)/, "")
+  if (a.startsWith("DPALI") || a.startsWith("ALI")) {
+    return `https://www.aliexpress.com/item/${numericPart}.html`
+  }
+  if (a.startsWith("DPTEMU") || a.startsWith("TEMU")) {
+    return `https://www.temu.com/goods.html?goods_id=${numericPart}`
+  }
+  if (/^[A-Z0-9]{10}$/.test(a)) {
+    return `https://www.amazon.com/dp/${a}`
+  }
+  return null
+}
+
+function getSourceUrl(item: MonitorItem): string | null {
+  if (item.sourceUrl) return item.sourceUrl
+  if (!item.asin) return null
+  const asin = item.asin
+  if (asin.startsWith("DPALI") || asin.startsWith("ALI")) {
+    const id = asin.replace(/^(DPALI|ALI)/, "")
+    return `https://www.aliexpress.com/item/${id}.html`
+  }
+  if (asin.startsWith("DPTEMU") || asin.startsWith("TEMU")) {
+    const id = asin.replace(/^(DPTEMU|TEMU)/, "")
+    return `https://www.temu.com/goods.html?goods_id=${id}`
+  }
+  if (/^[A-Z0-9]{10}$/.test(asin)) {
+    return `https://www.amazon.com/dp/${asin}`
+  }
+  return null
+}
+
 type MonitorFilter = "all" | "TRACKED" | "UNTRACKED" | "BLIND" | "ERROR" | "NO_COST" | "QTY0"
 
 function passesFilter(item: MonitorItem, filter: MonitorFilter): boolean {
@@ -75,11 +109,11 @@ function passesFilter(item: MonitorItem, filter: MonitorFilter): boolean {
     case "all":
       return true
     case "TRACKED":
-      return item.status === "TRACKED"
+      return item.isTracked
     case "UNTRACKED":
-      return item.status === "UNTRACKED"
+      return !item.isTracked
     case "BLIND":
-      return item.quantity === 0 && item.status === "TRACKED"
+      return item.quantity === 0 && item.isTracked
     case "ERROR":
       return isErrorItem(item)
     case "NO_COST":
@@ -91,16 +125,15 @@ function passesFilter(item: MonitorItem, filter: MonitorFilter): boolean {
   }
 }
 
-function TrackedBadge({ status }: { status: MonitorItem["status"] }) {
-  const tracked = status === "TRACKED"
+function TrackedBadge({ isTracked }: { isTracked: boolean }) {
   return (
     <span style={{
       padding: "2px 8px", borderRadius: "20px", fontSize: "10px", fontWeight: 700,
       fontFamily: "'JetBrains Mono', monospace", textTransform: "uppercase",
-      background: tracked ? "rgba(0,255,136,0.12)" : "rgba(136,136,136,0.12)",
-      color: tracked ? "var(--accent)"        : "var(--dim)",
+      background: isTracked ? "rgba(0,255,136,0.12)" : "rgba(136,136,136,0.12)",
+      color: isTracked ? "var(--accent)"        : "var(--dim)",
     }}>
-      {status}
+      {isTracked ? "TRACKED" : "UNTRACKED"}
     </span>
   )
 }
@@ -128,7 +161,7 @@ const filterButtons: { key: MonitorFilter; label: string }[] = [
 
 // ─── EDIT MODAL ───────────────────────────────────────────────
 
-type EditFields = { stock: number; cost: number; ebayPrice: number }
+type EditFields = { stock: number; cost: number; ebayPrice: number; sourceUrl: string }
 
 function EditModal({
   item,
@@ -146,6 +179,7 @@ function EditModal({
     stock:     Number.isFinite(item.quantity) ? item.quantity : 0,
     cost:      hasValidCost(item) ? item.cost! : 0,
     ebayPrice: hasValidPrice(item) ? item.ebayPrice : 0,
+    sourceUrl: item.sourceUrl ?? getSourceUrl(item) ?? "",
   })
 
   const marginVal = fields.ebayPrice > 0 && Number.isFinite(fields.cost)
@@ -222,6 +256,19 @@ function EditModal({
           <span style={{ color: calcMargin === "—" ? "var(--dim)" : marginColorFromItem({ ...item, margin: parseFloat(calcMargin) }), fontWeight: 700 }}>{calcMargin}{calcMargin === "—" ? "" : "%"}</span>
         </div>
 
+        <div style={{ marginTop: "16px" }}>
+          <label style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", letterSpacing: "0.05em", color: "var(--dim)" }}>
+            KAYNAK URL
+          </label>
+          <input
+            type="url"
+            placeholder="https://www.aliexpress.com/item/..."
+            value={fields.sourceUrl}
+            onChange={e => setFields(f => ({ ...f, sourceUrl: e.target.value }))}
+            style={{ width: "100%", boxSizing: "border-box", marginTop: "8px", padding: "12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text)", fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}
+          />
+        </div>
+
         <div style={{ display: "flex", gap: "10px" }}>
           <button
             onClick={async () => {
@@ -273,14 +320,14 @@ function DetailDrawer({
   busy: boolean
 }) {
   const blinded = item.quantity === 0
-  const row = (label: string, value: string) => (
+  const row = (label: string, value: React.ReactNode) => (
     <div key={label} style={{ marginBottom: "14px" }}>
       <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "var(--dim)", fontFamily: "'JetBrains Mono', monospace", marginBottom: "4px" }}>{label}</p>
       <p style={{ fontSize: "13px", color: "var(--text)", fontFamily: "'JetBrains Mono', monospace", wordBreak: "break-word" }}>{value}</p>
     </div>
   )
 
-  const lastSync = formatIso(item.listedAt) !== "—" ? formatIso(item.listedAt) : (lastFetchAt ? formatIso(lastFetchAt) : "—")
+  const lastSync = formatIso(item.lastSyncAt) !== "—" ? formatIso(item.lastSyncAt) : (lastFetchAt ? formatIso(lastFetchAt) : "—")
 
   return (
     <>
@@ -318,8 +365,19 @@ function DetailDrawer({
         </div>
         <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
           {row("SKU", item.sku?.trim() || "—")}
-          {row("ASIN", item.asin?.trim() || "—")}
-          {row("eBay item id", item.ebayItemId?.trim() || "—")}
+          {row("ASIN", (() => {
+            const asin = item.asin?.trim()
+            if (!asin) return "—"
+            const url = getSourceUrl(item)
+            return url
+              ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{asin}</a>
+              : asin
+          })())}
+          {row("eBay item id", (() => {
+            const id = item.ebayItemId?.trim()
+            if (!id) return "—"
+            return <a href={`https://www.ebay.com/itm/${id}`} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{id}</a>
+          })())}
           {row("Price", displayPriceText(item))}
           {row("Cost", displayCostText(item))}
           {row("QTY", displayQty(item))}
@@ -371,15 +429,16 @@ function DetailDrawer({
 
 type MonitorSortKey = "listed_desc" | "listed_asc" | "price_desc" | "price_asc"
 
-function ProductCard({ item, onEdit, onBlind, onSync, onDetail, selectMode, selected, onToggleSelect }: {
-  item:           MonitorItem
-  onEdit:         (item: MonitorItem) => void
-  onBlind:        (item: MonitorItem) => void
-  onSync:         (item: MonitorItem) => void
-  onDetail:       (item: MonitorItem) => void
-  selectMode:     boolean
-  selected:       boolean
-  onToggleSelect: (sku: string) => void
+function ProductCard({ item, onEdit, onBlind, onSync, onDetail, selectMode, selected, onToggleSelect, onUpdateSourceUrl }: {
+  item:                MonitorItem
+  onEdit:              (item: MonitorItem) => void
+  onBlind:             (item: MonitorItem) => void
+  onSync:              (item: MonitorItem) => void
+  onDetail:            (item: MonitorItem) => void
+  selectMode:          boolean
+  selected:            boolean
+  onToggleSelect:      (sku: string) => void
+  onUpdateSourceUrl:   (sku: string, url: string) => Promise<void>
 }) {
   const sku = item.sku?.trim() || ""
   const showCb = selectMode && Boolean(sku)
@@ -456,7 +515,7 @@ function ProductCard({ item, onEdit, onBlind, onSync, onDetail, selectMode, sele
           <p style={{ fontSize: "12px", color: "var(--text)", lineHeight: "1.4", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>
             {item.title?.trim() || "—"}
           </p>
-          <TrackedBadge status={item.status} />
+          <TrackedBadge isTracked={item.isTracked} />
         </div>
 
         <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "var(--dim)" }}>
@@ -465,13 +524,18 @@ function ProductCard({ item, onEdit, onBlind, onSync, onDetail, selectMode, sele
 
         {item.asin?.trim() ? (
           <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "var(--info)" }}>
-            {item.asin}
+            {(() => {
+              const url = getSourceUrl(item)
+              return url
+                ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{item.asin}</a>
+                : item.asin
+            })()}
           </p>
         ) : null}
 
         {item.ebayItemId?.trim() ? (
           <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "9px", color: "var(--dim)", marginTop: "2px" }}>
-            eBay: {item.ebayItemId}
+            eBay: <a href={`https://www.ebay.com/itm/${item.ebayItemId.trim()}`} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{item.ebayItemId}</a>
           </p>
         ) : null}
 
@@ -534,7 +598,7 @@ export default function MonitorPage() {
   const kpiError = useMemo(() => items.filter(isErrorItem).length, [items])
 
   const selectedStoreDisplayName = useMemo(
-    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || selectedStore,
+    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || "Store",
     [stores, selectedStore]
   )
 
@@ -601,6 +665,12 @@ export default function MonitorPage() {
     }
   }
 
+  async function handleUpdateSourceUrl(sku: string, url: string): Promise<void> {
+    await postMonitorUpdateSourceUrl(selectedStore, sku, url)
+    setItems(prev => prev.map(i => i.sku === sku ? { ...i, sourceUrl: url } : i))
+    showToast("Kaynak URL kaydedildi", "success")
+  }
+
   async function handleSave(item: MonitorItem, fields: EditFields): Promise<void> {
     const priceChanged = fields.ebayPrice !== item.ebayPrice
     const stockChanged = fields.stock     !== item.quantity
@@ -610,6 +680,11 @@ export default function MonitorPage() {
     }
     if (stockChanged) {
       await postMonitorUpdateStock(selectedStore, item.sku, fields.stock)
+    }
+
+    const urlChanged = fields.sourceUrl !== (item.sourceUrl ?? getSourceUrl(item) ?? "")
+    if (urlChanged && fields.sourceUrl.trim()) {
+      await postMonitorUpdateSourceUrl(selectedStore, item.sku, fields.sourceUrl.trim())
     }
 
     const newMargin = fields.ebayPrice > 0 && fields.cost > 0 && Number.isFinite(fields.cost)
@@ -651,16 +726,16 @@ export default function MonitorPage() {
     switch (sortKey) {
       case "listed_desc":
         arr.sort((a, b) => {
-          const na = ts(a.listedAt) ?? Number.NEGATIVE_INFINITY
-          const nb = ts(b.listedAt) ?? Number.NEGATIVE_INFINITY
+          const na = ts(a.lastSyncAt) ?? Number.NEGATIVE_INFINITY
+          const nb = ts(b.lastSyncAt) ?? Number.NEGATIVE_INFINITY
           if (nb !== na) return nb - na
           return a.sku.localeCompare(b.sku)
         })
         break
       case "listed_asc":
         arr.sort((a, b) => {
-          const na = ts(a.listedAt) ?? Number.POSITIVE_INFINITY
-          const nb = ts(b.listedAt) ?? Number.POSITIVE_INFINITY
+          const na = ts(a.lastSyncAt) ?? Number.POSITIVE_INFINITY
+          const nb = ts(b.lastSyncAt) ?? Number.POSITIVE_INFINITY
           if (na !== nb) return na - nb
           return a.sku.localeCompare(b.sku)
         })
@@ -968,6 +1043,7 @@ export default function MonitorPage() {
                 selectMode={selectMode}
                 selected={Boolean(sku && selectedSkus.has(sku))}
                 onToggleSelect={toggleSelectedSku}
+                onUpdateSourceUrl={handleUpdateSourceUrl}
               />
             )
           })}

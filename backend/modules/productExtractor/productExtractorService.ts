@@ -16,7 +16,7 @@ import type {
   ProductExtractorErrorResponse,
 } from "./productExtractorTypes"
 
-const ASIN_REGEX = /^([A-Z0-9]{10}|TEMU[0-9]+)$/
+const ASIN_REGEX = /^([A-Z0-9]{10}|TEMU[0-9]+|ALI[0-9]+)$/
 
 function normalizeAsin(asin: string): string {
   return asin.trim().toUpperCase()

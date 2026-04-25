@@ -102,6 +102,7 @@ export type DispatchJobReportRequest = {
   status: DispatchJobStatus
   error?: string
   failedStage?: DispatchFailedStage
+  failureKind?: "job_timeout"
 }
 
 export type DispatchJobReportResponse = { ok: true }

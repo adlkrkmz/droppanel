@@ -24,6 +24,16 @@ module.exports = {
       env: {
         NODE_ENV: 'production'
       }
+    },
+    {
+      name: 'droppanel-panel',
+      cwd: './panel',
+      script: 'node',
+      args: 'node_modules/next/dist/bin/next dev',
+      env: {
+        PORT: 3000,
+        NODE_ENV: 'development'
+      }
     }
   ]
 }

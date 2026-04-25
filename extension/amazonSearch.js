@@ -497,6 +497,10 @@
       else if (c.reviewCount < cfg.minReviewCount) reasons.push('review_count_below_minimum')
     }
 
+    if (cfg.maxReviewCount != null && cfg.maxReviewCount > 0) {
+      if (c.reviewCount !== null && c.reviewCount > cfg.maxReviewCount) reasons.push('review_count_above_maximum')
+    }
+
     if (cfg.minRating > 0) {
       if (c.rating === null) reasons.push('missing_rating')
       else if (c.rating < cfg.minRating) reasons.push('rating_below_minimum')
@@ -505,6 +509,10 @@
     if (cfg.minBoughtPastMonth != null && cfg.minBoughtPastMonth > 0) {
       if (c.boughtPastMonth === null) reasons.push('missing_bought_past_month')
       else if (c.boughtPastMonth < cfg.minBoughtPastMonth) reasons.push('bought_past_month_below_minimum')
+    }
+
+    if (cfg.maxBoughtPastMonth != null && cfg.maxBoughtPastMonth > 0) {
+      if (c.boughtPastMonth !== null && c.boughtPastMonth > cfg.maxBoughtPastMonth) reasons.push('bought_past_month_above_maximum')
     }
 
     if (cfg.minPrice != null || cfg.maxPrice != null) {
@@ -529,9 +537,11 @@
     var cfg = {
       minRating:            filters.minRating       || 0,
       minReviewCount:       filters.minReviewCount  || 0,
+      maxReviewCount:       filters.maxReviewCount ?? null,
       minPrice:             filters.minPrice        != null ? filters.minPrice        : null,
       maxPrice:             filters.maxPrice        != null ? filters.maxPrice        : null,
       minBoughtPastMonth:   filters.minMonthlySales != null ? filters.minMonthlySales : null,
+      maxBoughtPastMonth:   filters.maxMonthlySales ?? null,
       primeRequired:        !!filters.primeRequired,
       fastDeliveryRequired: !!filters.fastDeliveryRequired,
       lowStockBlocked:      !!filters.lowStockBlocked,

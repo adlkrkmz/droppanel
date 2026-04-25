@@ -2,29 +2,24 @@
 // monitorTypes.ts
 // ─────────────────────────────────────────────────────────────
 
-export type MonitorItemStatus = "TRACKED" | "UNTRACKED"
-
 export type MonitorItem = {
-  sku:          string
-  title:        string
-  image:        string | null
-  ebayPrice:    number
-  quantity:     number
-  cost:         number | null
-  margin:       number | null
-  asin:         string | null
-  ebayItemId:   string | null
-  listedAt:     string | null
-  status:       MonitorItemStatus
-  poolId:       number | null
-  stage:        string | null
+  sku:         string
+  title:       string
+  ebayItemId:  string | null
+  ebayPrice:   number
+  quantity:    number
+  cost:        number | null
+  isTracked:   boolean
+  lastSyncAt:  string | null
+  margin:      number | null
+  asin:        string | null
+  image:       string | null
+  sourceUrl:   string | null
 }
 
 export type MonitorListingsResult = {
   store:              string
-  /** Sıralanmış tüm monitor satırları (sayfalama öncesi) */
   total:              number
-  /** getInventoryItems.total — eBay envanter kayıt sayısı (Total kartı) */
   ebayInventoryTotal: number
   tracked:            number
   untracked:          number

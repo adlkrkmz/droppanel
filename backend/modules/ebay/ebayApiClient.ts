@@ -101,6 +101,14 @@ export type EbayActiveListingPriceRow = {
   currency:          string
   /** eBay offer.status (PUBLISHED, vb.) */
   offerStatus?:      string | null
+  /** Trading: Item.Title */
+  title?:            string | null
+  /** Trading: CurrentPrice (düz metin) */
+  currentPrice?:     number
+  /** Trading: QuantityAvailable */
+  quantityAvailable?: number
+  /** Trading: PictureDetails / GalleryURL — ana görsel */
+  imageUrl?:         string | null
 }
 
 export type EbayApiErrorDetail = {
@@ -983,7 +991,7 @@ export class EbayApiClient {
   }
 
   /**
-   * importExistingEbayListings için toplu çekim:
+   * Toplu offer çekimi:
    * 1) GET /sell/inventory/v1/offer?limit=100&offset=… (SKU parametresi yok)
    * 2) İlk istek HTTP 400 dönerse (ör. invalid SKU) → Trading GetMyeBaySelling
    */
@@ -1082,41 +1090,54 @@ export class EbayApiClient {
     const itemRe = /<Item>([\s\S]*?)<\/Item>/gi
     let m: RegExpExecArray | null
     while ((m = itemRe.exec(slice)) !== null) {
-      const block   = m[1]
-      const itemId  = xmlTextContent(block, "ItemID")
-      let sku       = xmlTextContent(block, "SKU")
-      if (!sku) sku = xmlTextContent(block, "CustomLabel")
-      const skuFinal = (sku || itemId || "").trim()
-      if (!skuFinal) continue
+      const block = m[1]
+
+      const itemId = (xmlTextContent(block, "ItemID") ?? "").trim()
+      const skuTag = (xmlTextContent(block, "SKU") ?? "").trim()
+      const customLabel = (xmlTextContent(block, "CustomLabel") ?? "").trim()
+      const sku = (skuTag || customLabel || itemId).trim()
+      if (!sku) continue
+
+      const title = xmlTextContent(block, "Title")
+      const quantity = parseInt(xmlTextContent(block, "QuantityAvailable") || "0", 10) || 0
+      let currentPrice = parseFloat(xmlTextContent(block, "CurrentPrice") || "0")
+      if (!Number.isFinite(currentPrice)) {
+        const curFull = block.match(
+          /<CurrentPrice\s+[^>]*currencyID="([^"]+)"[^>]*>([\d.]+)<\/CurrentPrice>/i
+        )
+        const curSimple = block.match(/<CurrentPrice[^>]*>([\d.]+)<\/CurrentPrice>/i)
+        currentPrice = parseFloat(curFull?.[2] ?? curSimple?.[1] ?? "0")
+      }
+      if (!Number.isFinite(currentPrice)) currentPrice = 0
 
       const curFull = block.match(
         /<CurrentPrice\s+[^>]*currencyID="([^"]+)"[^>]*>([\d.]+)<\/CurrentPrice>/i
       )
-      const curSimple = block.match(/<CurrentPrice[^>]*>([\d.]+)<\/CurrentPrice>/i)
-      const currency  = curFull?.[1] ?? "USD"
-      const priceRaw  = curFull?.[2] ?? curSimple?.[1] ?? "0"
-      const price     = parseFloat(priceRaw)
+      const currency = curFull?.[1] ?? "USD"
 
-      const qAvail = xmlTextContent(block, "QuantityAvailable")
-      const qTot   = xmlTextContent(block, "Quantity")
-      const qStr   = qAvail || qTot
-      const qty    = qStr ? (parseInt(qStr, 10) || parseFloat(qStr) || 0) : 0
+      const imageUrlRaw = xmlTextContent(block, "GalleryURL")
+      const imageUrlTrim = imageUrlRaw.trim()
+      const imageUrl = imageUrlTrim.length > 0 ? imageUrlTrim : null
 
       rows.push({
-        sku:               skuFinal,
-        price:             Number.isFinite(price) ? price : 0,
+        sku,
+        price:             currentPrice,
         offerId:           "",
-        listingId:         itemId.trim() || null,
-        availableQuantity: qty,
+        listingId:         itemId || null,
+        availableQuantity: quantity,
         currency,
         offerStatus:       null,
+        title:             title.trim() ? title.trim() : null,
+        currentPrice,
+        quantityAvailable: quantity,
+        imageUrl,
       })
     }
 
     return rows
   }
 
-  private async fetchGetMyeBaySellingAllPages(): Promise<EbayActiveListingPriceRow[]> {
+  async fetchGetMyeBaySellingAllPages(): Promise<EbayActiveListingPriceRow[]> {
     const tradingUrl = this.isSandbox ? EBAY_TRADING_DLL_SB : EBAY_TRADING_DLL_PROD
     const collected: EbayActiveListingPriceRow[] = []
     const siteId = (process.env.EBAY_SITE_ID ?? "0").trim()

@@ -282,7 +282,6 @@ export async function buildEbayListingPayloads(
       AND ap.pipeline_stage IN ('validated', 'scraped', 'ai_generated')
       AND ap.assigned_store_id IS NOT NULL
       AND apc.asin_registry_id IS NOT NULL
-      AND apc.price > 0
       AND s.status = 'active'
       ${poolFilter}
     ORDER BY ap.priority DESC, ap.id ASC
@@ -295,7 +294,7 @@ export async function buildEbayListingPayloads(
 
   const result = await query<EbayPayloadSourceRow>(sql, params)
 
-  return result.rows.map(row => {
+  const rows = result.rows.map(row => {
     const title  = resolveTitle(row)
     const brand  = resolveBrand(row)
     const images = parseImages(row.images)
@@ -335,4 +334,32 @@ export async function buildEbayListingPayloads(
       itemSpecifics,
     }
   })
+
+  const validRows: EbayListingPayload[] = []
+  const zeropricePoolIds: number[] = []
+
+  for (let i = 0; i < rows.length; i++) {
+    const sourceRow   = result.rows[i]
+    const payload     = rows[i]
+    const amazonPrice = parseNum(sourceRow.amazonPrice)
+    if (!amazonPrice || amazonPrice <= 0) {
+      zeropricePoolIds.push(payload.poolId)
+    } else {
+      validRows.push(payload as EbayListingPayload)
+    }
+  }
+
+  if (zeropricePoolIds.length > 0) {
+    await query(
+      `UPDATE asin_pool
+     SET pipeline_stage = 'validated',
+         ai_status = null,
+         updated_at = NOW()
+     WHERE id = ANY($1::bigint[])`,
+      [zeropricePoolIds]
+    )
+    console.warn(`[PayloadBuilder] ${zeropricePoolIds.length} ürün fiyat=0, validated'a geri alındı:`, zeropricePoolIds)
+  }
+
+  return validRows
 }

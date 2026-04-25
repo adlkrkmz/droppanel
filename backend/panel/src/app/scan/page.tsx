@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000"
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.listjetgo.com"
 
 const AMAZON_CATEGORIES = [
   { value: "aps",                            label: "All Departments" },
@@ -74,7 +74,9 @@ export default function ScanPage() {
   const [maxPrice,        setMaxPrice]        = useState("")
   const [minRating,       setMinRating]       = useState("")
   const [minReviews,      setMinReviews]      = useState("")
+  const [maxReviews,      setMaxReviews]      = useState("")
   const [minSales,        setMinSales]        = useState("")
+  const [maxSales,        setMaxSales]        = useState("")
   const [primeReq,        setPrimeReq]        = useState(false)
   const [fastDelivReq,    setFastDelivReq]    = useState(false)
   const [lowStockBlock,   setLowStockBlock]   = useState(true)
@@ -175,7 +177,9 @@ export default function ScanPage() {
         maxPrice:             maxPrice    ? parseFloat(maxPrice)    : null,
         minRating:            minRating   ? parseFloat(minRating)   : 0,
         minReviewCount:       minReviews  ? parseInt(minReviews,10) : 0,
+        maxReviewCount:       maxReviews  ? parseInt(maxReviews,10) : null,
         minMonthlySales:      minSales    ? parseInt(minSales,10)   : null,
+        maxMonthlySales:      maxSales    ? parseInt(maxSales,10)   : null,
         primeRequired:        primeReq,
         fastDeliveryRequired: fastDelivReq,
         lowStockBlocked:      lowStockBlock,
@@ -288,10 +292,14 @@ export default function ScanPage() {
           <div style={{ flex: "1 1 100px" }}>
             <FLabel>Min Yorum</FLabel>
             <FInput type="number" min={0} value={minReviews} onChange={setMinReviews} placeholder="50" />
+            <FLabel>Max Yorum</FLabel>
+            <FInput type="number" min={0} value={maxReviews} onChange={setMaxReviews} placeholder="10000" />
           </div>
           <div style={{ flex: "1 1 120px" }}>
             <FLabel>Min Aylık Satış</FLabel>
             <FInput type="number" min={0} value={minSales} onChange={setMinSales} placeholder="50" />
+            <FLabel>Max Aylık Satış</FLabel>
+            <FInput type="number" min={0} value={maxSales} onChange={setMaxSales} placeholder="10000" />
           </div>
         </div>
 

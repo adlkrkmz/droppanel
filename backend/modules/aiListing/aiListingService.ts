@@ -538,6 +538,40 @@ export async function generateAiListing(input: AiListingInput): Promise<AiListin
     }
   }
 
+  const isAli = input.asin?.startsWith("ALI")
+  if (isAli) {
+    // Önce gelen specs'i item_specifics'e aktar
+    const aliSpecs = (input.specs ?? {}) as Record<string, string>
+    const SKIP_SPECS = new Set([
+      'brand', 'model', 'mpn', 'upc', 'ean', 'isbn',
+      'country of origin', 'origin', 'ship from',
+    ])
+    for (const [k, v] of Object.entries(aliSpecs)) {
+      if (!v || v.length > 200) continue
+      if (SKIP_SPECS.has(k.toLowerCase())) continue
+      if (
+        !itemSpecifics[k] ||
+        itemSpecifics[k] === 'Does not apply' ||
+        itemSpecifics[k] === 'Does Not Apply' ||
+        itemSpecifics[k] === ''
+      ) {
+        itemSpecifics[k] = v
+      }
+    }
+    // Eksik kalanları Temu gibi AI ile tamamla
+    const aliAiSpecs = await generateTemuItemSpecifics(ebayTitle, input.bullets ?? [])
+    for (const [k, v] of Object.entries(aliAiSpecs)) {
+      if (
+        !itemSpecifics[k] ||
+        itemSpecifics[k] === 'Does not apply' ||
+        itemSpecifics[k] === 'Does Not Apply' ||
+        itemSpecifics[k] === ''
+      ) {
+        itemSpecifics[k] = v
+      }
+    }
+  }
+
   return {
     ebayTitle,
     brand: input.brand ?? "",

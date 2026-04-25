@@ -37,7 +37,7 @@ export async function fetchPublishQueueForStore(
      WHERE ap.workspace_id      = $1
        AND ap.assigned_store_id = $2
        AND ap.status            = 'ready'
-       AND ap.pipeline_stage    = 'ai_generated'
+       AND ap.pipeline_stage    IN ('ai_generated', 'validated', 'scraped')
        AND ap.ai_status         = 'success'
      ORDER BY ap.priority DESC, ap.id ASC
      LIMIT $3`,

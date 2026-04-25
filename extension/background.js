@@ -150,11 +150,12 @@ async function processJob(job, wId) {
       openTabId = null
     }
     apiFetchJson('POST', '/admin/dispatch-jobs/report', {
-      jobId:       parseInt(job.id, 10),
-      workerId:    wId,
-      status:      'failed',
-      error:       'Timeout (60s)',
-      failedStage: 'extract'
+      jobId:        parseInt(job.id, 10),
+      workerId:     wId,
+      status:       'failed',
+      error:        'Timeout (60s)',
+      failedStage:  'extract',
+      failureKind:  'job_timeout'
     }).catch(function() {})
     workerBusy = false
   }, JOB_TIMEOUT_MS)
@@ -192,7 +193,7 @@ async function processJob(job, wId) {
       openTabId = tab.id
 
       await waitForTabLoad(tab.id)
-      await sleep(1500)
+      await sleep(3000)
 
       var captureRes = await new Promise(function(resolve) {
         chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE' }, function(response) {
@@ -206,6 +207,10 @@ async function processJob(job, wId) {
 
       if (!captureRes || !captureRes.ok) {
         throw new Error(captureRes && captureRes.error ? captureRes.error : 'CAPTURE yanıtsız')
+      }
+
+      if (!captureRes.data.price || captureRes.data.price <= 0) {
+        throw new Error('Fiyat çekilemedi (price=0), retry yapılacak')
       }
 
       await apiFetchJson('POST', '/admin/product/extract', captureRes.data)

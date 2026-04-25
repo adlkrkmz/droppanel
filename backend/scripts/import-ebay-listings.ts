@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
 dotenv.config()
-import { importExistingEbayListings } from '../modules/monitor/monitorSyncService'
+import { syncStoreFromTrading } from '../modules/monitor/monitorSyncService'
 
 async function main() {
   const storeIdRaw = process.argv[2] ?? ''
@@ -11,8 +11,8 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`Importing eBay listings for store id=${storeId} code=${storeCode}...`)
-  const result = await importExistingEbayListings(storeId, storeCode)
+  console.log(`Syncing eBay Trading listings for store id=${storeId} code=${storeCode}...`)
+  const result = await syncStoreFromTrading(storeId, storeCode)
   console.log('Done:', result)
   process.exit(0)
 }

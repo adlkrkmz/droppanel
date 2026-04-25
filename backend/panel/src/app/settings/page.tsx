@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useStore } from "@/lib/storeContext"
 import { useToast } from "@/lib/toastContext"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000"
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.listjetgo.com"
 
 const DEFAULT_POLICY_OPTIONS = {
   fulfillmentPolicies: [] as { id: string; name: string }[],
@@ -157,9 +157,12 @@ type EbayAccountStatus = {
 
 function EbayConnectSection({
   storeCode,
+  storeDisplayName,
   onDisconnected,
 }: {
   storeCode: string
+  /** Panel mağaza listesinden — disconnect onayı vb. için (kod göstermemek) */
+  storeDisplayName?: string
   onDisconnected?: () => void | Promise<void>
 }) {
   const [status, setStatus] = useState<EbayAccountStatus | null>(null)
@@ -222,7 +225,8 @@ function EbayConnectSection({
   }
 
   async function handleDisconnect() {
-    const displayName = status?.storeName?.trim() || storeCode
+    const displayName =
+      status?.storeName?.trim() || storeDisplayName?.trim() || "Store"
     const ok = window.confirm(
       `Remove store ${displayName} and disconnect eBay? This deletes the store and its eBay link.`
     )
@@ -820,7 +824,7 @@ export default function SettingsPage() {
             className="flex flex-nowrap gap-1 p-1 rounded bg-[var(--surface)] border border-[var(--border)] overflow-x-auto"
           >
             {storesForTabs.map((s) => {
-              const tabLabel = s.name?.trim() || s.storeCode
+              const tabLabel = s.name?.trim() || "Store"
               return (
                 <button
                   key={s.id}
@@ -1212,6 +1216,7 @@ export default function SettingsPage() {
             </h2>
             <EbayConnectSection
               storeCode={selectedStore}
+              storeDisplayName={stores.find((x) => x.storeCode === selectedStore)?.name}
               onDisconnected={async () => {
                 await loadStores()
                 showToast("Store removed.")

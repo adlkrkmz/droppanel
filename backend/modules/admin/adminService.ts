@@ -263,12 +263,12 @@ export async function dispatchSelectedPool(
   }
 
   // Store bul
-  const storeResult = await query<{ id: number }>(
-    `SELECT id FROM stores WHERE workspace_id = $1 AND store_code = $2 AND status = 'active' LIMIT 1`,
+  const storeResult = await query<{ id: number; name: string }>(
+    `SELECT id, name FROM stores WHERE workspace_id = $1 AND store_code = $2 AND status = 'active' LIMIT 1`,
     [workspaceId, storeCode]
   )
   const store = storeResult.rows[0]
-  if (!store) throw new Error(`Active store not found: storeCode="${storeCode}"`)
+  if (!store) throw new Error("Active store not found")
 
   // ready veya skipped (önceki başarısız yükleme) itemları kabul et
   // skipped olanları ready'ye döndürüp yeniden ata

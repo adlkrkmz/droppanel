@@ -84,12 +84,16 @@ export type CreateRunRequest = {
   poolIds: number[]
 }
 
+/** Worker → backend: 60s job timeout gibi sınıflandırma (mesaj dışı). */
+export type DispatchJobFailureKind = "job_timeout"
+
 export type ReportJobRequest = {
   jobId: number
   workerId: string
   status: DispatchJobStatus
   error?: string
   failedStage?: DispatchFailedStage
+  failureKind?: DispatchJobFailureKind
 }
 
 export type RunStatusResult = {

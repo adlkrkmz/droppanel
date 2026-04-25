@@ -1,6 +1,10 @@
 import { query } from "../../db/client"
 import { addNotification } from "../notifications/notificationService"
-import { alertQueueStuck, alertScraperFailSpike } from "../notifications/telegramService"
+import {
+  alertQueueStuck,
+  alertScraperFailSpike,
+  alertDispatchJobPermanentFailure,
+} from "../notifications/telegramService"
 import {
   createDispatchJobsBulk,
   createDispatchRun,
@@ -10,20 +14,6 @@ import {
   getRunStatus as getRunStatusRepo,
   getActiveRuns as getActiveRunsRepo,
 } from "./dispatchJobsRepository"
-
-function isPermanentError(errorMessage: string): boolean {
-  return (
-    errorMessage.includes('HTTP 400') ||
-    errorMessage.includes('publishOffer failed') ||
-    errorMessage.includes('Pesticides') ||
-    errorMessage.includes('too many item specifics') ||
-    errorMessage.includes('Item Width') ||
-    errorMessage.includes('Item Length') ||
-    errorMessage.includes('Item Height') ||
-    errorMessage.includes('Unbranded products') ||
-    errorMessage.includes('policy')
-  )
-}
 import type {
   ClaimNextJobResult,
   CreateRunRequest,
@@ -32,6 +22,127 @@ import type {
   RunStatusResult,
   ReportJobRequest,
 } from "./dispatchJobsTypes"
+
+type FailureClassification = {
+  permanent: boolean
+  effectiveMaxAttempts: number
+  skipPoolOnTerminalFail: boolean
+  notifyTelegram: boolean
+}
+
+function isJobTimeoutError(
+  error: string | undefined,
+  failureKind?: ReportJobRequest["failureKind"]
+): boolean {
+  if (failureKind === "job_timeout") return true
+  const e = (error ?? "").trim()
+  return e.includes("Timeout (60s)") || /job\s*timeout/i.test(e)
+}
+
+function isHttpClientPermanentError(error: string | undefined): boolean {
+  const e = error ?? ""
+  return (
+    /\bAPI\s+400\b/.test(e) ||
+    /\bAPI\s+404\b/.test(e) ||
+    /\bHTTP\s*400\b/i.test(e) ||
+    /\bHTTP\s*404\b/i.test(e) ||
+    e.includes("Product not found in amazon_product_cache")
+  )
+}
+
+function isKnownPermanentProductOrListingError(error: string | undefined): boolean {
+  const e = error ?? ""
+  if (isHttpClientPermanentError(error)) return true
+  return (
+    e.includes("publishOffer failed") ||
+    e.includes("Pesticides") ||
+    e.includes("too many item specifics") ||
+    e.includes("Item Width") ||
+    e.includes("Item Length") ||
+    e.includes("Item Height") ||
+    e.includes("Unbranded products") ||
+    e.includes("policy")
+  )
+}
+
+/** CAPTURE / Amazon scrape — en fazla 2 deneme (3. kural). */
+function isCaptureOrAmazonScrapeError(
+  error: string | undefined,
+  failedStage?: ReportJobRequest["failedStage"]
+): boolean {
+  const low = (error ?? "").toLowerCase()
+  const stageHit = failedStage === "extract"
+  if (stageHit) {
+    if (low.includes("capture") || low.includes("yanıtsız") || low.includes("yanitsiz")) return true
+    if (low.includes("scrape")) return true
+    if (low.includes("chrome.runtime")) return true
+  }
+  return low.includes("capture") || low.includes("yanıtsız") || low.includes("yanitsiz")
+}
+
+/**
+ * Kalıcı: job timeout (retry yok), HTTP 4xx / ürün-listing kalıcı metinleri.
+ * CAPTURE+scrape: max 2 deneme; aşımda skip+Telegram.
+ * Diğer: max_attempts kadar retry_waiting (claim ile tekrar alınır).
+ */
+function classifyDispatchFailure(input: {
+  error?: string
+  failedStage?: ReportJobRequest["failedStage"]
+  failureKind?: ReportJobRequest["failureKind"]
+  maxAttempts: number
+  attemptCount: number
+}): FailureClassification {
+  const { error, failedStage, failureKind, maxAttempts, attemptCount } = input
+  const nextAfterFail = attemptCount + 1
+
+  if (isJobTimeoutError(error, failureKind)) {
+    return {
+      permanent: true,
+      effectiveMaxAttempts: maxAttempts,
+      skipPoolOnTerminalFail: false,
+      notifyTelegram: false,
+    }
+  }
+
+  {
+    const e = error ?? ""
+    if (e.includes("25019") || e.toLowerCase().includes("high-risk") || e.toLowerCase().includes("high risk")) {
+      return {
+        permanent: true,
+        effectiveMaxAttempts: maxAttempts,
+        skipPoolOnTerminalFail: true,
+        notifyTelegram: true,
+      }
+    }
+  }
+
+  if (isKnownPermanentProductOrListingError(error)) {
+    return {
+      permanent: true,
+      effectiveMaxAttempts: maxAttempts,
+      skipPoolOnTerminalFail: true,
+      notifyTelegram: true,
+    }
+  }
+
+  if (isCaptureOrAmazonScrapeError(error, failedStage)) {
+    const effectiveMax = Math.min(2, Math.max(1, maxAttempts))
+    const willRetry = nextAfterFail < effectiveMax
+    return {
+      permanent: false,
+      effectiveMaxAttempts: effectiveMax,
+      skipPoolOnTerminalFail: !willRetry,
+      notifyTelegram: !willRetry,
+    }
+  }
+
+  return {
+    permanent: false,
+    effectiveMaxAttempts: Math.max(1, maxAttempts),
+    skipPoolOnTerminalFail: false,
+    notifyTelegram: false,
+  }
+}
 
 let lastQueueAlertTime = 0
 let lastScraperAlertTime = 0
@@ -98,14 +209,16 @@ export async function createRunWithJobs(
   if (delaySeconds < 0) throw new Error("delaySeconds must be >= 0")
   if (!Array.isArray(poolIds) || poolIds.length === 0) throw new Error("poolIds must be non-empty")
 
-  const storeResult = await query<{ id: number }>(
-    `SELECT id FROM stores
+  const storeResult = await query<{ id: number; name: string }>(
+    `SELECT id, name FROM stores
      WHERE workspace_id = $1 AND store_code = $2 AND status = 'active'
      LIMIT 1`,
     [workspaceId, storeCode]
   )
-  const storeId = storeResult.rows[0]?.id
-  if (!storeId) throw new Error(`Active store not found: storeCode="${storeCode}"`)
+  const storeRow = storeResult.rows[0]
+  if (!storeRow?.id) throw new Error("Active store not found")
+  const storeId = storeRow.id
+  const storeDisplayName = storeRow.name?.trim() || "Store"
 
   const poolResult = await query<{ asin: string; pool_id: number | null; pipeline_stage: string }>(
     `SELECT ar.asin, ap.id AS pool_id, ap.pipeline_stage
@@ -119,7 +232,7 @@ export async function createRunWithJobs(
   function resolveJobType(stage: string): string {
     if (stage === "ai_generated") return "list_only"
     if (stage === "scraped")      return "ai_and_list"
-    return "scrape_and_list" // validated, imported, unknown
+    return "scrape_and_list"
   }
 
   const jobs = poolResult.rows.map(r => ({
@@ -153,7 +266,7 @@ export async function createRunWithJobs(
       workspaceId,
       "info",
       "Dispatch Run Başlatıldı",
-      `${jobs.length} ürün kuyruğa alındı — ${storeCode}`
+      `${jobs.length} ürün kuyruğa alındı — ${storeDisplayName}`
     )
   } catch {
     /* bildirim ana akışı bozmasın */
@@ -177,28 +290,77 @@ export async function reportProgress(
   workerId: string,
   status: ReportJobRequest["status"],
   error?: ReportJobRequest["error"],
-  failedStage?: ReportJobRequest["failedStage"]
+  failedStage?: ReportJobRequest["failedStage"],
+  failureKind?: ReportJobRequest["failureKind"]
 ): Promise<{ job: DispatchJob | null; run: DispatchRun | null }> {
   if (!workerId || workerId.trim() === "") throw new Error("workerId is required")
 
-  const permanent = status === "failed" && !!error && isPermanentError(error)
-  if (permanent) {
-    console.warn(`[dispatchJobs] Permanent error detected for job ${jobId}, skipping retry: ${error}`)
+  if (status !== "failed") {
+    const jobRow = await reportJobProgress(jobId, status, error, failedStage, false, null)
+    if (!jobRow) return { job: null, run: null }
+    const runRow = await updateRunCounters(jobRow.run_id)
+    return { job: mapJob(jobRow), run: runRow ? mapRun(runRow) : null }
   }
 
-  const jobRow = await reportJobProgress(jobId, status, error, failedStage, permanent)
+  const pre = await query<{
+    attempt_count: number
+    max_attempts: number
+    pool_id: number | null
+    asin: string
+    store_code: string
+  }>(
+    `SELECT attempt_count, max_attempts, pool_id, asin, store_code
+     FROM dispatch_jobs WHERE id = $1 LIMIT 1`,
+    [jobId]
+  )
+  const snapshot = pre.rows[0]
+
+  const classification = snapshot
+    ? classifyDispatchFailure({
+        error,
+        failedStage,
+        failureKind,
+        maxAttempts: snapshot.max_attempts,
+        attemptCount: snapshot.attempt_count,
+      })
+    : {
+        permanent: false,
+        effectiveMaxAttempts: 3,
+        skipPoolOnTerminalFail: false,
+        notifyTelegram: false,
+      }
+
+  if (classification.permanent) {
+    console.warn(`[dispatchJobs] Non-retryable failure for job ${jobId}: ${error ?? ""}`)
+  }
+
+  const effectiveArg = classification.permanent ? null : classification.effectiveMaxAttempts
+
+  const jobRow = await reportJobProgress(
+    jobId,
+    status,
+    error,
+    failedStage,
+    classification.permanent,
+    effectiveArg
+  )
   if (!jobRow) return { job: null, run: null }
 
-  if (permanent && jobRow.pool_id != null) {
-    await query(
-      `UPDATE asin_pool
-       SET status         = 'skipped',
-           listing_status = 'failed',
-           updated_at     = NOW()
-       WHERE id = $1`,
-      [jobRow.pool_id]
-    ).catch((e: unknown) => {
-      console.warn(`[dispatchJobs] Failed to mark pool ${jobRow.pool_id} as skipped:`, e)
+  const terminalFailed = jobRow.status === "failed"
+  if (terminalFailed && classification.skipPoolOnTerminalFail && jobRow.pool_id != null) {
+    const poolId = jobRow.pool_id
+    try {
+      await query(`UPDATE dispatch_jobs SET pool_id = NULL WHERE pool_id = $1`, [poolId])
+      await query(`DELETE FROM asin_pool WHERE id = $1`, [poolId])
+    } catch (e: unknown) {
+      console.warn(`[dispatchJobs] Failed to delete asin_pool id=${poolId}:`, e)
+    }
+  }
+
+  if (terminalFailed && classification.notifyTelegram) {
+    const msg = jobRow.last_error ?? error ?? ""
+    void alertDispatchJobPermanentFailure(jobRow.asin, jobRow.store_code, msg).catch((e: unknown) => {
+      console.warn("[dispatchJobs] Telegram alert failed:", e)
     })
   }
 

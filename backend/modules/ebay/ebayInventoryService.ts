@@ -623,6 +623,47 @@ export async function runInventoryFlow(
       )
     }
 
+    // Zorunlu aspectler eklendi, şimdi 45'e kırp
+    const aspectKeys = Object.keys(aspects)
+    if (aspectKeys.length > 45) {
+      const priority = [
+        "Brand",
+        "Type",
+        "Color",
+        "Material",
+        "Size",
+        "Style",
+        "MPN",
+        "UPC",
+        "EAN",
+        "Condition",
+        "Item Length",
+        "Item Width",
+        "Item Height",
+        "Item Weight",
+        "Model Number",
+        "Special Feature",
+        "Number of Items",
+        "Included Components",
+        "Required Assembly",
+        "Room Type",
+        "Mounting Type",
+        "Finish Type",
+        "Material Type",
+      ]
+      const kept: Record<string, string[]> = {}
+      for (const k of priority) {
+        if (aspects[k]) kept[k] = aspects[k]
+      }
+      for (const k of aspectKeys) {
+        if (Object.keys(kept).length >= 45) break
+        if (!kept[k]) kept[k] = aspects[k]
+      }
+      Object.keys(aspects).forEach(k => delete aspects[k])
+      Object.assign(aspects, kept)
+      console.log(`[InventoryFlow] aspects kırpıldı: ${Object.keys(aspects).length}`)
+    }
+
     console.log(`[InventoryFlow] Final aspects Brand=${JSON.stringify(aspects["Brand"])} keys=${Object.keys(aspects).length}`)
 
     const inventoryBody: EbayInventoryItemRequest = {

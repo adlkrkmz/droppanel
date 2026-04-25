@@ -157,7 +157,7 @@ async function ensureActiveStore(
   const existing = await getStoreByCode(workspaceId, storeCode)
   if (existing) return existing
 
-  const displayName = (nameForNewStore?.trim() || `Store ${storeCode}`).slice(0, 512)
+  const displayName = (nameForNewStore?.trim() || "Store").slice(0, 512)
   try {
     const ins = await query<{ id: number; name: string }>(
       `INSERT INTO stores (workspace_id, name, store_code, status)
@@ -166,12 +166,12 @@ async function ensureActiveStore(
       [workspaceId, displayName, storeCode]
     )
     const row = ins.rows[0]
-    if (!row) throw new Error(`Failed to create store "${storeCode}"`)
+    if (!row) throw new Error(`Failed to create store "${displayName}"`)
     return row
   } catch {
     const again = await getStoreByCode(workspaceId, storeCode)
     if (again) return again
-    throw new Error(`Failed to create store "${storeCode}"`)
+    throw new Error(`Failed to create store "${displayName}"`)
   }
 }
 
@@ -251,7 +251,7 @@ export async function buildAuthUrl(
 ): Promise<EbayConnectUrlResponse> {
   if (!allowMissingStore) {
     const store = await getStoreByCode(workspaceId, storeCode)
-    if (!store) throw new Error(`Active store not found: "${storeCode}"`)
+    if (!store) throw new Error("Active store not found")
   }
 
   const state   = crypto.randomBytes(16).toString("hex")
@@ -311,7 +311,7 @@ export async function handleCallback(
     expiresAt    = new Date(Date.now() + 2 * 60 * 60 * 1000) // 2 saat
     ebayUserId   = `sim_user_${storeCode.toLowerCase()}`
     scope        = EBAY_SCOPES
-    storeDisplayName = ebayUserId ?? `Store ${storeCode}`
+    storeDisplayName = "eBay (simulation)"
   } else {
     const base   = cfg0.sandbox ? EBAY_TOKEN_SANDBOX : EBAY_TOKEN_PROD
     const creds  = Buffer.from(`${cfg0.clientId}:${cfg0.clientSecret}`).toString("base64")
@@ -375,10 +375,12 @@ export async function refreshAccessToken(
   simulationMode: boolean
 ): Promise<EbayTokenRefreshResult> {
   const store = await getStoreByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Store not found: "${storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   const account = await getAccountByStore(workspaceId, store.id)
-  if (!account?.refreshToken) throw new Error(`No refresh token for store "${storeCode}"`)
+  if (!account?.refreshToken) {
+    throw new Error(`No refresh token for store "${store.name?.trim() || "Store"}"`)
+  }
 
   let accessToken:  string
   let refreshToken: string
@@ -443,7 +445,7 @@ export async function getAccountStatus(
   storeCode:   string
 ): Promise<EbayAccountStatus> {
   const store = await getStoreByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Store not found: "${storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   const account = await getAccountByStore(workspaceId, store.id)
 
@@ -471,12 +473,14 @@ export async function getValidAccessToken(
   simulationMode: boolean
 ): Promise<string> {
   const store = await getStoreByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Store not found: "${storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   if (simulationMode) return "SIM_TOKEN"
 
   const account = await getAccountByStore(workspaceId, store.id)
-  if (!account?.accessToken) throw new Error(`Store "${storeCode}" is not connected to eBay`)
+  if (!account?.accessToken) {
+    throw new Error(`Store "${store.name?.trim() || "Store"}" is not connected to eBay`)
+  }
 
   // 5 dk kala yenile
   const expiresAt = account.expiresAt ? new Date(account.expiresAt).getTime() : 0

@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000"
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.listjetgo.com"
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -90,14 +90,21 @@ export async function getPool(params?: { stage?: string; status?: string; storeC
 }
 
 export type MonitorItem = {
-  sku: string; title: string; image: string | null
-  ebayPrice: number; quantity: number
-  cost: number | null; margin: number | null
-  asin: string | null; ebayItemId: string | null; listedAt: string | null
-  status: "TRACKED" | "UNTRACKED"
-  poolId: number | null; stage: string | null
+  sku: string
+  title: string
+  ebayItemId: string | null
+  ebayPrice: number
+  quantity: number
+  cost: number | null
+  isTracked: boolean
+  lastSyncAt: string | null
+  margin: number | null
+  asin: string | null
+  image: string | null
+  sourceUrl: string | null
 }
 export type MonitorResult = {
+  /** Mağazanın görünen adı (store_code değil) */
   store: string
   total: number
   ebayInventoryTotal: number
@@ -120,6 +127,9 @@ export async function postMonitorUpdateStock(storeCode: string, sku: string, qua
 }
 export async function postMonitorBlind(storeCode: string, sku: string): Promise<{ success: boolean; simulation: boolean; message: string }> {
   return apiFetch("/admin/monitor/blind", { method: "POST", body: JSON.stringify({ storeCode, sku }) })
+}
+export async function postMonitorUpdateSourceUrl(storeCode: string, sku: string, sourceUrl: string): Promise<{ ok: boolean }> {
+  return apiFetch("/admin/monitor/update-source-url", { method: "POST", body: JSON.stringify({ storeCode, sku, sourceUrl }) })
 }
 export async function getMonitorListings(
   storeCode = "S1",

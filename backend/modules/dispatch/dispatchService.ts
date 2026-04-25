@@ -65,10 +65,10 @@ export async function runDispatch(
   // 1. Mağazayı bul
   const store = await findStoreByCode(workspaceId, storeCode)
   if (!store) {
-    throw new Error(`Store not found: storeCode="${storeCode}" workspace="${workspaceId}"`)
+    throw new Error("Store not found")
   }
   if (store.status !== "active") {
-    throw new Error(`Store is not active: storeCode="${storeCode}" status="${store.status}"`)
+    throw new Error(`Store is not active: ${store.name?.trim() || "Store"} (${store.status})`)
   }
 
   console.log(`[Dispatch] Store found: ${store.name} (id=${store.id})`)

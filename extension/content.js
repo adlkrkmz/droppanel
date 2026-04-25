@@ -498,6 +498,110 @@
       return true
     }
 
+    if (request.type === 'CAPTURE_ALIEXPRESS') {
+      if (!location.href.includes('aliexpress.com/item/') && !location.href.includes('aliexpress.us/item/')) {
+        sendResponse({ ok: false, error: 'AliExpress ürün sayfasında değilsiniz' })
+        return true
+      }
+      try {
+        // BAŞLIK
+        let title = ''
+        const h1s = document.querySelectorAll('h1')
+        for (const h of h1s) {
+          const t = (h.textContent || '').trim()
+          if (t.length > 10) { title = t; break }
+        }
+        if (!title) throw new Error('Başlık bulunamadı')
+
+        // ÜRÜN ID
+        const productIdMatch = location.pathname.match(/\/(\d+)\.html/)
+        const productId = productIdMatch ? productIdMatch[1] : null
+        if (!productId) throw new Error('Ürün ID bulunamadı')
+
+        // FİYAT
+        let price = 0
+        const priceSelectors = [
+          '.price-default--current--F8OlYIo',
+          '[class*="price--current"]',
+          '[class*="product-price-current"]',
+          '[class*="uniform-banner-box-price"]'
+        ]
+        for (const sel of priceSelectors) {
+          const el = document.querySelector(sel)
+          if (el) {
+            const raw = (el.textContent || '').replace(/[^0-9.,]/g, '').replace(',', '.')
+            const n = parseFloat(raw)
+            if (n > 0) { price = n; break }
+          }
+        }
+
+        // GÖRSELLER
+        const seen = new Set()
+        const images = []
+        const imgEls = document.querySelectorAll(
+          '[class*="slider"] img, [class*="gallery"] img, [class*="thumbnail"] img'
+        )
+        for (const img of imgEls) {
+          if (images.length >= 8) break
+          let src = img.src || ''
+          if (!src.includes('aliexpress-media.com/kf/') && !src.includes('alicdn.com')) continue
+          // URL temizle — küçük boyut suffix'lerini at
+          src = src
+            .replace(/_\d+x\d+q\d+\.jpg_\.avif.*$/, '')
+            .replace(/_\d+x\d+\.[a-z]+.*$/, '')
+            .replace(/\?.*$/, '')
+          if (seen.has(src)) continue
+          seen.add(src)
+          images.push(src)
+        }
+        if (!images.length) throw new Error('Görsel bulunamadı')
+
+        // SPESİFİKASYONLAR
+        const specs = {}
+        document.querySelectorAll('[class*="specification--prop"]').forEach(el => {
+          const k = (el.querySelector('[class*="specification--title"]')?.textContent || '').trim()
+          const v = (el.querySelector('[class*="specification--desc"]')?.textContent || '').trim()
+          if (k && v) specs[k] = v
+        })
+
+        // DESCRIPTION (shadow DOM)
+        let description = ''
+        const descHost = document.querySelector('[class*="description--product-description"]')
+        if (descHost) {
+          const shadow = descHost.querySelector('div')?.shadowRoot
+          if (shadow) {
+            description = (shadow.querySelector('div')?.innerText || '').trim().slice(0, 3000)
+          }
+        }
+
+        sendResponse({
+          ok: true,
+          data: {
+            asin: 'ALI' + productId,
+            external_id: productId,
+            source: 'aliexpress',
+            title,
+            brand: specs['Brand'] || specs['brand'] || '',
+            price,
+            currency: 'USD',
+            images,
+            bullets: [],
+            description,
+            specs,
+            rating: 0,
+            reviews: 0,
+            bsr: null,
+            category: '',
+            isPrime: false,
+            isFreeShipping: true
+          }
+        })
+      } catch(e) {
+        sendResponse({ ok: false, error: e.message })
+      }
+      return true
+    }
+
     return false;
   });
 })();

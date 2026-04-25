@@ -294,6 +294,73 @@
     }
   }
 
+  async function onCaptureDirectAli() {
+    try {
+      setMessage('')
+      const aliPriceVal = parseFloat(document.getElementById('aliPrice').value)
+      const aliPriceError = document.getElementById('aliPriceError')
+      if (!aliPriceVal || aliPriceVal <= 0) {
+        aliPriceError.style.display = 'block'
+        document.getElementById('aliPrice').style.border = '1.5px solid #dc2626'
+        return
+      }
+      aliPriceError.style.display = 'none'
+      document.getElementById('aliPrice').style.border = ''
+      const storeCode = directStoreSelect.value
+      if (!storeCode) return showError('Mağaza seçin')
+      const quantity = Math.max(1, parseInt(directQuantityInput.value || '1', 10) || 1)
+      setMessage('AliExpress sayfası okunuyor...', '')
+      const captured = await new Promise((resolve, reject) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const t = tabs?.[0]
+          if (!t?.id) return reject(new Error('Tab bulunamadı'))
+          chrome.tabs.sendMessage(t.id, { type: 'CAPTURE_ALIEXPRESS' }, (resp) => {
+            if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
+            resolve(resp)
+          })
+        })
+      })
+      if (!captured || !captured.ok) {
+        throw new Error(captured?.error || 'AliExpress capture başarısız')
+      }
+      captured.data.price = aliPriceVal
+      captured.data.ebayListingPrice = aliPriceVal
+      setMessage('Ürün kaydediliyor...', '')
+      await apiFetchJson('POST', '/admin/product/extract', captured.data)
+      setMessage('AI listing oluşturuluyor...', '')
+      await apiFetchJson('POST', '/admin/ai-listing/generate', { asin: captured.data.asin })
+      setMessage("Pool'a ekleniyor...", '')
+      await apiFetchJson('POST', '/admin/asins/import', { asins: [captured.data.asin] })
+      await new Promise(r => setTimeout(r, 2000))
+      const poolData = await apiFetchJson('GET', '/admin/pool?status=ready')
+      const poolEntry = (poolData.rows || []).find(r => r.asin === captured.data.asin)
+      if (!poolEntry) throw new Error("Pool'da bulunamadı")
+      setMessage("eBay'e yükleniyor...", '')
+      await apiFetchJson('POST', '/admin/pool/dispatch-selected', {
+        storeCode,
+        poolIds: [poolEntry.poolId],
+      })
+      const runRes = await apiFetchJson('POST', '/admin/listing/run', {
+        storeCode,
+        count: 1,
+        selectionMode: 'fifo',
+        delaySeconds: 0,
+        quantity,
+        dryRun: false,
+        simulationMode: false,
+        poolIds: [poolEntry.poolId],
+      })
+      if (runRes?.publish?.succeeded === 0) {
+        throw new Error('eBay yükleme başarısız')
+      }
+      showOk('✓ AliExpress ürünü listelendi!')
+    } catch(e) {
+      let msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('AliExpress ürün sayfasında değilsiniz')) msg = '❌ AliExpress ürün sayfasında olun'
+      showError(msg)
+    }
+  }
+
   const btnCaptureDirectTemu = document.getElementById('btnCaptureDirectTemu')
 
   tabPool.addEventListener('click', () => setTab('pool'));
@@ -301,6 +368,8 @@
   btnCapturePool.addEventListener('click', () => void onCapturePool());
   btnCaptureDirect.addEventListener('click', () => void onCaptureDirect());
   btnCaptureDirectTemu.addEventListener('click', () => void onCaptureDirectTemu());
+  const btnCaptureDirectAli = document.getElementById('btnCaptureDirectAli')
+  btnCaptureDirectAli.addEventListener('click', () => void onCaptureDirectAli())
 
   // init
   fillStoreSelects()

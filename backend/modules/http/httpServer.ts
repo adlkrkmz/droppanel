@@ -9,7 +9,7 @@ import {
   handleGetPool, handlePostPoolDispatch, handlePostListingRun, handleDeletePoolItems,
   handlePostDispatchRunCreate, handlePostDispatchJobClaimNext, handlePostDispatchJobReport,
   handleGetDispatchRunStatus, handleGetDispatchActiveRuns,
-  handleGetEbayConnectUrl, handlePostEbayAuthUrl, handlePostEbayConnect, handleGetEbayCallback, handleGetEbayAccountStatus, handleGetEbayAccounts, handlePostEbayRefresh, handleGetMonitorListings, handlePostMonitorUpdatePrice, handlePostMonitorUpdateStock, handlePostMonitorBlind, handlePostAsinImport, handlePostProductExtract, handlePostAiListingGenerate, handlePostDispatch, handlePostPublishRun,
+  handleGetEbayConnectUrl, handlePostEbayAuthUrl, handlePostEbayConnect, handleGetEbayCallback, handleGetEbayAccountStatus, handleGetEbayAccounts, handlePostEbayRefresh, handleGetMonitorListings, handlePostMonitorUpdatePrice, handlePostMonitorUpdateStock, handlePostMonitorBlind, handlePostMonitorUpdateSourceUrl, handlePostAsinImport, handlePostProductExtract, handlePostAiListingGenerate, handlePostDispatch, handlePostPublishRun,
   handlePostCreateStore, handlePostEbayDisconnect, handlePostDispatchJobsCleanupStale,
   handleGetSettings, handlePostSettingsAddress, handleGetSettingsPolicies, handlePostSettingsPolicies, handlePostSettingsMarkup,
   handleGetNotifications, handlePostNotificationsRead, handlePostNotificationsReadAll,
@@ -92,6 +92,7 @@ const routes: RouteDefinition[] = [
   { method: "post", path: "/admin/monitor/update-price",   handler: adapt(handlePostMonitorUpdatePrice) },
   { method: "post", path: "/admin/monitor/update-stock",   handler: adapt(handlePostMonitorUpdateStock) },
   { method: "post", path: "/admin/monitor/blind",          handler: adapt(handlePostMonitorBlind)       },
+  { method: "post", path: "/admin/monitor/update-source-url", handler: adapt(handlePostMonitorUpdateSourceUrl) },
   { method: "get",  path: "/admin/monitor/listings",       handler: adapt(handleGetMonitorListings) },
   { method: "post", path: "/admin/asins/import",           handler: adapt(handlePostAsinImport)   },
   { method: "post", path: "/admin/product/extract",        handler: adapt(handlePostProductExtract) },
@@ -116,6 +117,8 @@ export function buildApp(config: ServerConfig): express.Application {
         const allowed = [
           "http://localhost:3000",
           "http://localhost:3001",
+          "https://panel.listjetgo.com",
+          "https://api.listjetgo.com",
         ]
         // chrome extension ve null origin'e izin ver
         if (!origin || allowed.includes(origin) || String(origin).startsWith("chrome-extension://")) {

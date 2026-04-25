@@ -10,7 +10,7 @@ import { addNotification } from "@/lib/notifications"
 const STAGES   = ["all", "validated", "scraped", "ai_generated", "listed"]
 const STATUSES = ["all", "ready", "completed"]
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000"
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.listjetgo.com"
 
 function stageColor(s: string): string {
   switch (s) {
@@ -41,10 +41,16 @@ function Badge({ value, color }: { value: string; color: string }) {
   )
 }
 
-function poolStoreDisplayName(stores: StoreRow[], code: string | null | undefined): string {
+function poolStoreDisplayName(
+  stores: StoreRow[],
+  code: string | null | undefined,
+  assignedName?: string | null
+): string {
+  const fromRow = assignedName?.trim()
+  if (fromRow) return fromRow
   if (code == null || String(code).trim() === "") return "—"
   const row = stores.find((s) => s.storeCode === code)
-  return row?.name?.trim() || String(code)
+  return row?.name?.trim() || "—"
 }
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
@@ -116,7 +122,7 @@ export default function PoolPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const selectedStoreDisplayLabel = useMemo(
-    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || selectedStore,
+    () => stores.find((s) => s.storeCode === selectedStore)?.name?.trim() || "Store",
     [stores, selectedStore]
   )
 
@@ -399,7 +405,7 @@ export default function PoolPage() {
             await postAdmin("/admin/pool/dispatch-selected", { storeCode: selectedStore, poolIds })
             const listingRes = await postAdmin<{ publish?: { succeeded?: number; failed?: number } }>(
               "/admin/publish/run",
-              { storeCode: selectedStore, count: poolIds.length, selectionMode: "fifo", delaySeconds: quickDispatchDelay, quantity: quickDispatchQuantity, dryRun: false, simulationMode: false }
+              { storeCode: selectedStore, poolIds, count: poolIds.length, selectionMode: "fifo", delaySeconds: quickDispatchDelay, quantity: quickDispatchQuantity, dryRun: false, simulationMode: false }
             )
             const succeeded = listingRes?.publish?.succeeded ?? 0
             const failed    = listingRes?.publish?.failed    ?? 0
@@ -475,7 +481,7 @@ export default function PoolPage() {
             await postAdmin("/admin/pool/dispatch-selected", { storeCode: selectedStore, poolIds })
             const listingRes = await postAdmin<{ publish?: { succeeded?: number; failed?: number } }>(
               "/admin/publish/run",
-              { storeCode: selectedStore, count: poolIds.length, selectionMode: "fifo", delaySeconds: dispatchDelay, quantity: dispatchQuantity, dryRun: false, simulationMode: false }
+              { storeCode: selectedStore, poolIds, count: poolIds.length, selectionMode: "fifo", delaySeconds: dispatchDelay, quantity: dispatchQuantity, dryRun: false, simulationMode: false }
             )
             const succeeded = listingRes?.publish?.succeeded ?? 0
             const failed    = listingRes?.publish?.failed    ?? 0
@@ -659,7 +665,7 @@ export default function PoolPage() {
             <option value="all">All Stores</option>
             {stores.map((s) => (
               <option key={s.id} value={s.storeCode}>
-                {s.name?.trim() || s.storeCode}
+                {s.name?.trim() || "Store"}
               </option>
             ))}
           </select>
@@ -807,7 +813,7 @@ export default function PoolPage() {
                     >
                       {stores.map((s) => (
                         <option key={s.id} value={s.storeCode}>
-                          {s.name?.trim() || s.storeCode}
+                          {s.name?.trim() || "Store"}
                         </option>
                       ))}
                     </select>
@@ -846,7 +852,7 @@ export default function PoolPage() {
                 )}
               </div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: row.assignedStoreCode ? "var(--info)" : "var(--dim)", display: "flex", alignItems: "center" }}>
-                {poolStoreDisplayName(stores, row.assignedStoreCode)}
+                {poolStoreDisplayName(stores, row.assignedStoreCode, row.assignedStoreName)}
               </div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "var(--dim)", display: "flex", alignItems: "center" }}>
                 {row.updatedAt ? row.updatedAt.slice(0, 16).replace("T", " ") : "—"}

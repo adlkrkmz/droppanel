@@ -43,6 +43,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function isEbayHighRiskPoolDeleteError(msg: string): boolean {
+  if (!msg) return false
+  const low = msg.toLowerCase()
+  return (
+    msg.includes("25019") ||
+    low.includes("high-risk") ||
+    low.includes("high risk")
+  )
+}
+
 async function publishOne(
   payload:        EbayListingPayload,
   storeSettings:  StoreSettingsRow | null,
@@ -121,13 +131,32 @@ async function publishOne(
       flowResult.publishStatus       === "failed" || flowResult.publishStatus       === "FAILED"
 
     if (didFail) {
+      const errorMsg = flowResult.error ?? ""
+      if (isEbayHighRiskPoolDeleteError(errorMsg)) {
+        console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
+        await query(
+          `DELETE FROM asin_pool WHERE id = $1`,
+          [payload.poolId]
+        ).catch(() => undefined)
+        return {
+          poolId: payload.poolId,
+          asin:   payload.asin,
+          sku:    payload.sku,
+          status: "failed",
+          error:  errorMsg,
+          durationMs: Date.now() - t0,
+          guardScore: guard.score,
+          guardErrors:   [],
+          guardWarnings: guard.warnings,
+        }
+      }
       await markPoolAsPublishFailed(payload.poolId)
       return {
         poolId: payload.poolId,
         asin:   payload.asin,
         sku:    payload.sku,
         status: "failed",
-        error:  flowResult.error ?? "flow failed",
+        error:  errorMsg || "flow failed",
         durationMs: Date.now() - t0,
         guardScore: guard.score,
         guardErrors:   [],
@@ -151,9 +180,17 @@ async function publishOne(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
-    await markPoolAsPublishFailed(payload.poolId).catch(() => undefined)
-    await markPoolAsSkipped(payload.poolId).catch(() => undefined)
+    if (isEbayHighRiskPoolDeleteError(msg)) {
+      console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
+      await query(
+        `DELETE FROM asin_pool WHERE id = $1`,
+        [payload.poolId]
+      ).catch(() => undefined)
+    } else {
+      console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
+      await markPoolAsPublishFailed(payload.poolId).catch(() => undefined)
+      await markPoolAsSkipped(payload.poolId).catch(() => undefined)
+    }
     return {
       poolId: payload.poolId,
       asin:   payload.asin,
@@ -186,27 +223,31 @@ export async function runTimedPublishForStore(
   const startedAt = new Date().toISOString()
   const t0        = Date.now()
 
-  const notifyListingDone = async (succeeded: number, failed: number) => {
-    try {
-      await addNotification(
-        workspaceId,
-        succeeded > 0 ? "success" : "error",
-        "Listing Tamamlandı",
-        `${succeeded} başarılı, ${failed} başarısız — ${storeCode}`
-      )
-    } catch {
-      /* bildirim ana akışı bozmasın */
-    }
-  }
-
   console.log(
     `[PublishQueue] Starting | store=${storeCode} delay=${delaySeconds}s dryRun=${dryRun}` +
       (targetPoolIds ? ` targetIds=${targetPoolIds.length}` : "")
   )
 
   const store = await findStoreIdByCode(workspaceId, storeCode)
-  if (!store) throw new Error(`Store not found: storeCode="${storeCode}"`)
-  if (store.status !== "active") throw new Error(`Store not active: "${storeCode}"`)
+  if (!store) throw new Error("Store not found")
+  if (store.status !== "active") {
+    throw new Error(`Store not active: ${store.name?.trim() || "Store"}`)
+  }
+
+  const storeDisplayName = store.name?.trim() || "Store"
+
+  const notifyListingDone = async (succeeded: number, failed: number) => {
+    try {
+      await addNotification(
+        workspaceId,
+        succeeded > 0 ? "success" : "error",
+        "Listing Tamamlandı",
+        `${succeeded} başarılı, ${failed} başarısız — ${storeDisplayName}`
+      )
+    } catch {
+      /* bildirim ana akışı bozmasın */
+    }
+  }
 
   console.log(`[PublishQueue] Store: ${store.name} (id=${store.id})`)
 
@@ -310,8 +351,16 @@ export async function runTimedPublishForStore(
       result = await publishOne(payload, storeSettings, ebayFlowOpts, dryRun)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
-      await markPoolAsSkipped(payload.poolId).catch(() => undefined)
+      if (isEbayHighRiskPoolDeleteError(msg)) {
+        console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
+        await query(
+          `DELETE FROM asin_pool WHERE id = $1`,
+          [payload.poolId]
+        ).catch(() => undefined)
+      } else {
+        console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
+        await markPoolAsSkipped(payload.poolId).catch(() => undefined)
+      }
       result = {
         poolId:        payload.poolId,
         asin:          payload.asin,

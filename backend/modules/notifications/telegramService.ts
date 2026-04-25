@@ -73,3 +73,19 @@ export async function alertScraperFailSpike(failCount: number, totalCount: numbe
     `🕷️ <b>Scraper Fail Spike!</b>\nSon ${totalCount} job'un ${failCount} tanesi başarısız!\nScraper'ı kontrol et.`
   )
 }
+
+function escapeTgHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+/** Kalıcı dispatch hatası (HTTP 400, CAPTURE 2. deneme vb.) — tek job bildirimi. */
+export async function alertDispatchJobPermanentFailure(
+  asin: string,
+  storeCode: string,
+  reason: string
+): Promise<void> {
+  const safe = escapeTgHtml(reason.slice(0, 400))
+  await sendTelegramAlert(
+    `🛑 <b>Dispatch job kalıcı hata</b>\nMağaza: <code>${storeCode}</code>\nASIN: <code>${asin}</code>\n${safe}`
+  )
+}

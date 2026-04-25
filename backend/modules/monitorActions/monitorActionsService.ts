@@ -88,7 +88,7 @@ export async function updatePrice(
   if (req.newPrice <= 0) throw new Error("newPrice must be > 0")
 
   const store = await getStoreByCode(workspaceId, req.storeCode)
-  if (!store) throw new Error(`Store not found: "${req.storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   if (simulationMode) {
     console.log(`[MonitorActions][SIM] updatePrice sku=${req.sku} price=${req.newPrice}`)
@@ -161,7 +161,7 @@ export async function updateStock(
   if (req.quantity < 0) throw new Error("quantity must be >= 0")
 
   const store = await getStoreByCode(workspaceId, req.storeCode)
-  if (!store) throw new Error(`Store not found: "${req.storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   if (simulationMode) {
     console.log(`[MonitorActions][SIM] updateStock sku=${req.sku} qty=${req.quantity}`)
@@ -208,6 +208,22 @@ export async function updateStock(
   }
 }
 
+// ─── UPDATE SOURCE URL ────────────────────────────────────────
+
+export async function updateSourceUrl(
+  workspaceId: string,
+  sku: string,
+  sourceUrl: string
+): Promise<void> {
+  await query(
+    `UPDATE store_catalog_state
+     SET source_url = $1, updated_at = NOW()
+     WHERE workspace_id = $2
+       AND internal_sku = $3`,
+    [sourceUrl, workspaceId, sku]
+  )
+}
+
 // ─── BLIND ────────────────────────────────────────────────────
 
 export async function blindListing(
@@ -217,7 +233,7 @@ export async function blindListing(
   sandbox:        boolean
 ): Promise<BlindResponse> {
   const store = await getStoreByCode(workspaceId, req.storeCode)
-  if (!store) throw new Error(`Store not found: "${req.storeCode}"`)
+  if (!store) throw new Error("Store not found")
 
   if (simulationMode) {
     console.log(`[MonitorActions][SIM] blind sku=${req.sku}`)
