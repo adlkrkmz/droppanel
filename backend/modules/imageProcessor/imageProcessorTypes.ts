@@ -6,6 +6,8 @@
 export type ImageProcessorInput = {
   imageUrls: string[]
   asin:      string
+  /** When true, composite "Ships from USA" banner on first image (store setting). */
+  warehouseShippingBannerEnabled?: boolean
 }
 
 export type ProcessedImage = {

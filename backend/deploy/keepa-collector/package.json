@@ -1,0 +1,14 @@
+{
+  "name": "listjetgo-keepa-collector",
+  "version": "1.0.14",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "npx ts-node --transpile-only keepa-collector.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

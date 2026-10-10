@@ -12,6 +12,7 @@
 
 import {
   fetchPublishQueueForStore,
+  findStoreById,
   findStoreIdByCode,
   markPoolAsPublishFailed,
   markPoolAsSkipped,
@@ -30,6 +31,16 @@ import {
 } from "../ebay/ebayPublishPersistenceService"
 import { query } from "../../db/client"
 import { addNotification } from "../notifications/notificationService"
+import {
+  evaluatePoolAmazonAvailability,
+  resolveDirectListAvailabilitySkipReason,
+  resolveAvailabilitySkipReason,
+} from "../amazon/amazonAvailabilityGuardService"
+import {
+  archivePoolItemForHighRisk,
+  isAmazonAsin,
+  processAvailabilityArchiveSkip,
+} from "../pool/poolPrimeGuardService"
 import { getSettingsByStore } from "../storeSettings/storeSettingsRepository"
 import { runPublishGuard } from "../publishGuard/publishGuardService"
 import type { StoreSettingsRow } from "../storeSettings/storeSettingsTypes"
@@ -38,6 +49,7 @@ import type {
   TimedPublishOptions,
   TimedPublishRunResult,
 } from "./publishQueueTypes"
+import { findExistingListedAsins } from "../asinImport/listedAsinGuard"
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -98,19 +110,11 @@ async function publishOne(
   }
 
   try {
-    const alreadyLive = await query<{ id: number }>(
-      `SELECT lh.id FROM listing_history lh
-   INNER JOIN asin_registry ar ON ar.id = lh.asin_registry_id
-   WHERE lh.workspace_id = $1
-     AND lh.store_id = $2
-     AND ar.asin = $3
-     AND lh.status = 'live'
-   LIMIT 1`,
-      [payload.workspaceId, payload.storeId, payload.asin]
-    )
+    const alreadyLive = await findExistingListedAsins(payload.workspaceId, [payload.asin])
 
-    if (alreadyLive.rows.length > 0) {
-      console.log(`  [Guard] SKIP: ${payload.asin} already live in store`)
+    if (alreadyLive.has(payload.asin)) {
+      const match = alreadyLive.get(payload.asin)!
+      console.log(`  [Guard] SKIP: ${payload.asin} already live in connected store ${match.storeCode}`)
       return {
         poolId: payload.poolId,
         asin: payload.asin,
@@ -120,7 +124,7 @@ async function publishOne(
         durationMs: Date.now() - t0,
         guardScore: null,
         guardErrors: [],
-        guardWarnings: ["Already live in this store"],
+        guardWarnings: [`Already live in connected store ${match.storeCode}`],
       }
     }
 
@@ -133,11 +137,8 @@ async function publishOne(
     if (didFail) {
       const errorMsg = flowResult.error ?? ""
       if (isEbayHighRiskPoolDeleteError(errorMsg)) {
-        console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
-        await query(
-          `DELETE FROM asin_pool WHERE id = $1`,
-          [payload.poolId]
-        ).catch(() => undefined)
+        console.warn(`[PublishQueue] High-risk category, arşivleniyor: ${payload.asin}`)
+        await archivePoolItemForHighRisk(payload.workspaceId, payload.poolId).catch(() => undefined)
         return {
           poolId: payload.poolId,
           asin:   payload.asin,
@@ -177,15 +178,13 @@ async function publishOne(
       guardScore: guard.score,
       guardErrors:   [],
       guardWarnings: guard.warnings,
+      ebayListingId: flowResult.ebayListingId ?? null,
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (isEbayHighRiskPoolDeleteError(msg)) {
-      console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
-      await query(
-        `DELETE FROM asin_pool WHERE id = $1`,
-        [payload.poolId]
-      ).catch(() => undefined)
+      console.warn(`[PublishQueue] High-risk category, arşivleniyor: ${payload.asin}`)
+      await archivePoolItemForHighRisk(payload.workspaceId, payload.poolId).catch(() => undefined)
     } else {
       console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
       await markPoolAsPublishFailed(payload.poolId).catch(() => undefined)
@@ -210,6 +209,7 @@ export async function runTimedPublishForStore(
 ): Promise<TimedPublishRunResult> {
   const {
     storeCode,
+    storeId: preferredStoreId,
     workspaceId,
     delaySeconds,
     limit,
@@ -218,17 +218,32 @@ export async function runTimedPublishForStore(
     ebaySandbox,
     simulationMode,
     targetPoolIds,
+    titleMode = "ai",
+    source,
+    archiveAvailabilityFailures = true,
+    allowUnknownStockForDirectList = false,
   } = opts
+
+  if (source === "scheduled_live_single_job") {
+    if (!targetPoolIds || targetPoolIds.length !== 1) {
+      throw new Error("scheduled live single job enforced: targetPoolIds must contain exactly 1 pool id")
+    }
+    console.log("[PublishQueue] scheduled live single job enforced (limit=1)")
+  }
+
+  const effectiveLimit = source === "scheduled_live_single_job" ? 1 : limit
 
   const startedAt = new Date().toISOString()
   const t0        = Date.now()
 
   console.log(
-    `[PublishQueue] Starting | store=${storeCode} delay=${delaySeconds}s dryRun=${dryRun}` +
+    `[PublishQueue] Starting | store=${storeCode} delay=${delaySeconds}s dryRun=${dryRun} titleMode=${titleMode}` +
       (targetPoolIds ? ` targetIds=${targetPoolIds.length}` : "")
   )
 
-  const store = await findStoreIdByCode(workspaceId, storeCode)
+  const store = preferredStoreId != null && Number.isInteger(preferredStoreId) && preferredStoreId > 0
+    ? await findStoreById(workspaceId, preferredStoreId)
+    : await findStoreIdByCode(workspaceId, storeCode)
   if (!store) throw new Error("Store not found")
   if (store.status !== "active") {
     throw new Error(`Store not active: ${store.name?.trim() || "Store"}`)
@@ -259,22 +274,56 @@ export async function runTimedPublishForStore(
   let payloads: EbayListingPayload[]
 
   if (targetPoolIds && targetPoolIds.length > 0) {
-    // SQL seviyesinde filtrele — bellek içi filtreleme yerine doğrudan DB'den çek
-    payloads = await buildEbayListingPayloads(workspaceId, targetPoolIds.length * 3, targetPoolIds)
+    const { splitEligiblePoolItems } = await import("../pool/poolEligibilityService")
+    const split = await splitEligiblePoolItems(workspaceId, targetPoolIds)
+    const eligibleTargetIds = split.eligibleIds
+
+    if (eligibleTargetIds.length === 0) {
+      await notifyListingDone(0, 0)
+      return {
+        storeId:     store.id,
+        storeCode:   store.storeCode,
+        storeName:   store.name,
+        delaySeconds,
+        dryRun,
+        attempted:   0,
+        succeeded:   0,
+        failed:      0,
+        skipped:     targetPoolIds.length,
+        blocked:     0,
+        items:       [],
+        startedAt,
+        completedAt: new Date().toISOString(),
+        totalMs:     Date.now() - t0,
+      }
+    }
+
+    if (split.skipDetails.length > 0) {
+      console.warn(
+        `[PublishQueue] ${split.skipDetails.length} poolId(s) skipped before payload build`
+      )
+    }
+
+    payloads = await buildEbayListingPayloads(
+      workspaceId,
+      source === "scheduled_live_single_job" ? 1 : eligibleTargetIds.length * 3,
+      eligibleTargetIds,
+      { titleMode, publishStoreId: store.id, promotion: opts.promotion }
+    )
 
     console.log(
-      `[PublishQueue] TargetPoolIds mode: matched=${payloads.length}/${targetPoolIds.length}`
+      `[PublishQueue] TargetPoolIds mode: matched=${payloads.length}/${eligibleTargetIds.length}`
     )
 
     const matched = new Set(payloads.map(p => p.poolId))
-    const missing = targetPoolIds.filter(id => !matched.has(id))
+    const missing = eligibleTargetIds.filter(id => !matched.has(id))
     if (missing.length > 0) {
       console.warn(
         `[PublishQueue] ${missing.length} poolId(s) not matched in payloads: ${missing.slice(0, 5).join(", ")}`
       )
     }
   } else {
-    const queueEntries = await fetchPublishQueueForStore(workspaceId, store.id, limit)
+    const queueEntries = await fetchPublishQueueForStore(workspaceId, store.id, effectiveLimit)
     console.log(`[PublishQueue] Queue: ${queueEntries.length} entries`)
 
     if (queueEntries.length === 0) {
@@ -297,10 +346,53 @@ export async function runTimedPublishForStore(
       }
     }
 
-    const allPayloads  = await buildEbayListingPayloads(workspaceId, limit * 2)
+    const allPayloads  = await buildEbayListingPayloads(workspaceId, effectiveLimit * 2, undefined, { titleMode })
     const queuePoolIds = new Set(queueEntries.map(e => e.poolId))
     payloads           = allPayloads.filter(p => queuePoolIds.has(p.poolId))
     console.log(`[PublishQueue] Payloads matched: ${payloads.length}/${queueEntries.length}`)
+  }
+
+  if (source === "scheduled_live_single_job" && payloads.length > 1) {
+    payloads = payloads.filter(p => p.poolId === targetPoolIds![0]).slice(0, 1)
+  }
+
+  if (payloads.length > 0) {
+    const archiveSkips: Array<{ poolId: number; asin: string; reason: string }> = []
+    const filterOnly = new Set<number>()
+    const seen = new Set<number>()
+    for (const p of payloads) {
+      if (!isAmazonAsin(p.asin) || seen.has(p.poolId)) continue
+      seen.add(p.poolId)
+      const availability = await evaluatePoolAmazonAvailability(workspaceId, p.poolId, p.asin)
+      const skipReason = allowUnknownStockForDirectList
+        ? resolveDirectListAvailabilitySkipReason(availability)
+        : resolveAvailabilitySkipReason(availability)
+      if (!skipReason) continue
+      if (skipReason === "NOT_PRIME" || skipReason === "OUT_OF_STOCK" || skipReason === "PRIME_UNKNOWN"
+        || skipReason === "LIMITED_STOCK" || skipReason === "STOCK_UNKNOWN") {
+        archiveSkips.push({ poolId: p.poolId, asin: p.asin, reason: skipReason })
+      } else {
+        filterOnly.add(p.poolId)
+        console.log(`[PublishQueue] Availability skip (no archive): poolId=${p.poolId} reason=${skipReason}`)
+      }
+    }
+    if (archiveSkips.length > 0) {
+      if (archiveAvailabilityFailures) {
+        await processAvailabilityArchiveSkip(workspaceId, archiveSkips)
+      } else {
+        console.log("[PublishQueue] Availability skip (Direct List; no archive): " + archiveSkips.length)
+      }
+      const archivedSet = new Set(archiveSkips.map(e => e.poolId))
+      payloads = payloads.filter(p => !archivedSet.has(p.poolId))
+    }
+    if (filterOnly.size > 0) {
+      payloads = payloads.filter(p => !filterOnly.has(p.poolId))
+    }
+    if (archiveSkips.length > 0 || filterOnly.size > 0) {
+      console.log(
+        `[PublishQueue] Availability filter: archived=${archiveSkips.length} filtered_unknown=${filterOnly.size} remaining=${payloads.length}`
+      )
+    }
   }
 
   const quantityOverride =
@@ -334,6 +426,9 @@ export async function runTimedPublishForStore(
   const ebayFlowOpts: InventoryFlowClientOptions = {
     sandbox:        ebaySandbox,
     simulationMode,
+    titleMode,
+    workspaceId,
+    storeId:        store.id,
   }
 
   const items: PublishItemResult[] = []
@@ -343,6 +438,7 @@ export async function runTimedPublishForStore(
   let blocked   = 0
 
   for (let i = 0; i < payloads.length; i++) {
+    if (source === "scheduled_live_single_job" && i > 0) break
     const payload = payloads[i]
     console.log(`[PublishQueue] [${i + 1}/${payloads.length}] ASIN=${payload.asin} SKU=${payload.sku}`)
 
@@ -352,11 +448,8 @@ export async function runTimedPublishForStore(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (isEbayHighRiskPoolDeleteError(msg)) {
-        console.warn(`[PublishQueue] High-risk category, havuzdan siliniyor: ${payload.asin}`)
-        await query(
-          `DELETE FROM asin_pool WHERE id = $1`,
-          [payload.poolId]
-        ).catch(() => undefined)
+        console.warn(`[PublishQueue] High-risk category, arşivleniyor: ${payload.asin}`)
+        await archivePoolItemForHighRisk(payload.workspaceId, payload.poolId).catch(() => undefined)
       } else {
         console.error(`[PublishQueue] Skipping ${payload.asin}: ${msg}`)
         await markPoolAsSkipped(payload.poolId).catch(() => undefined)

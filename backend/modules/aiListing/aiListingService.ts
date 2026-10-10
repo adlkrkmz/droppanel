@@ -292,13 +292,22 @@ function parseGeminiCategoryIdOnly(text: string): string | null {
 /**
  * eBay taxonomy önerileri arasından Gemini ile en uygun leaf categoryId seçer.
  */
+export type SelectBestCategoryOptions = {
+  /** false = first taxonomy suggestion only (no Gemini) */
+  useAi?: boolean
+}
+
 export async function selectBestCategory(
   title: string,
   specs: Record<string, string>,
-  suggestions: CategorySuggestionForSelection[]
+  suggestions: CategorySuggestionForSelection[],
+  options?: SelectBestCategoryOptions
 ): Promise<string> {
   const fallback = suggestions[0]?.categoryId ?? "0"
   if (suggestions.length === 0) return "0"
+  if (options?.useAi === false || suggestions.length === 1) {
+    return fallback
+  }
 
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey || apiKey.trim() === "") {
@@ -614,6 +623,8 @@ export async function generateAndCacheAiListing(
     `UPDATE asin_pool
      SET pipeline_stage = 'ai_generated',
          ai_status = 'success',
+         status = 'ready',
+         listing_status = 'pending',
          updated_at = NOW()
      WHERE workspace_id = $1 AND asin_registry_id = $2`,
     [workspaceId, asinRegistryId]

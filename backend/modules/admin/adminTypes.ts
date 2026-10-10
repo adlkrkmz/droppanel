@@ -38,7 +38,13 @@ export type AdminListingHistoryResult = {
 }
 
 export type AdminStoreRow = {
-  id: number; name: string; storeCode: string; status: string; createdAt: string
+  id: number
+  /** Stable store identity (same as id); preferred by extension clients. */
+  storeId: number
+  name: string
+  storeCode: string
+  status: string
+  createdAt: string
 }
 
 export type AdminCreateStoreRequest = {
@@ -54,27 +60,95 @@ export type AdminStoresResult = {
 
 // ─── POOL ─────────────────────────────────────────────────────
 
+export type PoolView =
+  | "active"
+  | "ready"
+  | "processing"
+  | "assigned"
+  | "failed"
+  | "history"
+  | "archived"
+  | "all"
+
 export type AdminPoolRow = {
   poolId: number; asin: string; title: string | null; brand: string | null
   amazonCost: number | null; pipelineStage: string; status: string
   scrapeStatus: string; aiStatus: string; listingStatus: string
   assignedStoreId: number | null; assignedStoreCode: string | null
-  assignedStoreName: string | null; updatedAt: string
+  assignedStoreName: string | null; createdAt: string; updatedAt: string
+  archivedAt: string | null; archivedBy: string | null; archiveReason: string | null
 }
 
 export type AdminPoolResult = {
   rows: AdminPoolRow[]; total: number
-  filters: { stage: string | null; status: string | null; storeCode: string | null }
+  filters: {
+    view:      PoolView | null
+    stage:     string | null
+    status:    string | null
+    storeCode: string | null
+  }
   generatedAt: string
 }
 
-export type AdminPoolDispatchRequest  = { storeCode: string; poolIds: number[]; delaySeconds?: number }
-export type AdminPoolDispatchResponse = { selectedCount: number; skippedCount: number; assignedPoolIds: number[] }
+export type PoolEligibilitySkipDetail = {
+  poolId: number
+  asin?:  string | null
+  reason: string
+}
+
+export type TitleMode = "titlebot" | "ai" | "original"
+
+export type AdminPoolDispatchRequest  = {
+  storeCode: string
+  poolIds?:  number[]
+  asins?:    string[]
+  delaySeconds?: number
+  titleMode?: TitleMode
+}
+export type AdminPoolDispatchResponse = {
+  selectedCount:   number
+  skippedCount:    number
+  assignedPoolIds: number[]
+  skipDetails?:    PoolEligibilitySkipDetail[]
+  poolSkipped?:    number
+  poolSkipDetails?: PoolEligibilitySkipDetail[]
+}
+
+// ─── POOL RESTORE ─────────────────────────────────────────────
+
+export type AdminPoolRestoreRequest = { poolIds: number[]; reason?: string }
+
+export type AdminPoolRestoreItemResult = {
+  poolId:  number
+  ok:      boolean
+  message?: string
+}
+
+export type AdminPoolRestoreResponse = {
+  ok:       boolean
+  restored: number
+  failed:   number
+  results?: AdminPoolRestoreItemResult[]
+}
 
 // ─── POOL DELETE (bulk) ─────────────────────────────────────
 
-export type AdminPoolDeleteRequest = { poolIds: number[] }
-export type AdminPoolDeleteResponse = { deleted: number }
+export type AdminPoolDeleteRequest = { poolIds: number[]; reason?: string }
+
+export type AdminPoolArchiveItemResult = {
+  poolId:  number
+  ok:      boolean
+  message?: string
+}
+
+export type AdminPoolDeleteResponse = {
+  ok:       boolean
+  archived: number
+  failed:   number
+  /** @deprecated use archived — kept for backward compatibility */
+  deleted:  number
+  results?: AdminPoolArchiveItemResult[]
+}
 
 // ─── LISTING RUN (single operation: dispatch + publish) ────────
 
@@ -116,6 +190,8 @@ export type AdminListingRunRequest = {
   dryRun?:        boolean
   simulationMode?: boolean
   poolIds?:       number[]
+  titleMode?:     TitleMode
+  useAiTitle?:    boolean
 }
 
 export type AdminListingRunDispatchSummary = {
@@ -153,6 +229,8 @@ export type AdminListingRunResponse = {
     items:      AdminListingRunPublishItem[]
     totalMs:    number
   }
+  poolSkipped?:   number
+  poolSkipDetails?: PoolEligibilitySkipDetail[]
   startedAt:   string
   completedAt: string
   totalMs:     number
@@ -179,6 +257,8 @@ export type AdminPublishRequest = {
   dryRun: boolean; simulationMode: boolean
   quantity?: number
   poolIds?: number[]
+  titleMode?: TitleMode
+  useAiTitle?: boolean
 }
 
 export type AdminPublishItemResult = {
@@ -193,15 +273,33 @@ export type AdminPublishResponse = {
   delaySeconds: number; dryRun: boolean
   attempted: number; succeeded: number; failed: number; skipped: number; blocked: number
   items: AdminPublishItemResult[]
+  poolSkipped?:   number
+  poolSkipDetails?: PoolEligibilitySkipDetail[]
   startedAt: string; completedAt: string; totalMs: number
 }
+
+// ─── SCHEDULED PUBLISH (re-export) ────────────────────────────
+
+export type {
+  ScheduledPublishCommand,
+  ScheduledPublishJob,
+  SchedulePublishRequest,
+  SchedulePublishResponse,
+  ScheduleCommandListResponse,
+  ScheduleJobListResponse,
+  ScheduleCommandActionResponse,
+  ScheduleCommandDetailResponse,
+  ScheduleSkipDetail,
+  ScheduleJobProgress,
+} from "../scheduledPublish/scheduledPublishTypes"
 
 // ─── REQUEST BASE ─────────────────────────────────────────────
 
 export type AdminRequest = {
-  query:  Record<string, string | undefined>
-  params: Record<string, string | undefined>
-  body:   unknown
+  query:   Record<string, string | undefined>
+  params:  Record<string, string | undefined>
+  body:    unknown
+  traceId?: string
 }
 
 export type AdminResponse<T> = {

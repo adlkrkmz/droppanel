@@ -13,6 +13,8 @@
 import { query }          from "../../db/client"
 import { EbayApiClient }  from "../ebay/ebayApiClient"
 import { getValidAccessToken } from "../ebayOAuth/ebayOAuthService"
+import { afterManualQuantityChanged } from "../stockGuard/stockGuardV2LifecycleHooks"
+import { setListingQuantityOnEbay } from "../stockAlerts/stockAlertsEbayZeroService"
 import type {
   BlindRequest, BlindResponse,
   UpdatePriceRequest, UpdatePriceResponse,
@@ -163,49 +165,64 @@ export async function updateStock(
   const store = await getStoreByCode(workspaceId, req.storeCode)
   if (!store) throw new Error("Store not found")
 
-  if (simulationMode) {
-    console.log(`[MonitorActions][SIM] updateStock sku=${req.sku} qty=${req.quantity}`)
-    return {
-      success:    true,
-      simulation: true,
-      sku:        req.sku,
-      quantity:   req.quantity,
-      message:    `[SIM] Stock updated to ${req.quantity}`,
-    }
-  }
-
-  console.log(`[MonitorActions] updateStock(start) storeCode=${req.storeCode} sku=${req.sku} qty=${req.quantity} simulation=${simulationMode} sandbox=${sandbox}`)
+  console.log(`[MonitorActions] updateStock(start) storeCode=${req.storeCode} sku=${req.sku} qty=${req.quantity} sandbox=${sandbox}`)
 
   try {
-    const token  = await getValidAccessToken(workspaceId, req.storeCode, false)
-    console.log(`[MonitorActions] updateStock tokenPrefix=${token.slice(0, 20)}`)
-    const client = new EbayApiClient({ oauthToken: token, sandbox, simulationMode: false })
-
-    console.log(`[MonitorActions] updateStock calling updateQuantity sku=${req.sku} qty=${req.quantity}`)
-    await client.updateQuantity(req.sku, req.quantity)
-    console.log(`[MonitorActions] updateStock completed updateQuantity sku=${req.sku} qty=${req.quantity}`)
-
-    // Offer quantity'sini de güncelle
-    const offerId = await client.getOfferId(req.sku)
-    if (offerId) {
-      await client.updateOfferQuantity(offerId, req.quantity)
-      console.log(`[MonitorActions] updateStock offer updated offerId=${offerId} qty=${req.quantity}`)
-    } else {
-      console.warn(`[MonitorActions] updateStock offerId not found for sku=${req.sku}`)
-    }
+    await setListingQuantityOnEbay(
+      workspaceId,
+      req.storeCode,
+      { internalSku: req.sku, ebayItemId: null, ebayOfferId: null },
+      req.quantity,
+      "manual_listing",
+      sandbox,
+      store.id
+    )
+    console.log(`[MonitorActions] updateStock completed quantity mutation sku=${req.sku} qty=${req.quantity}`)
 
   } catch (e) {
     console.error("[MonitorActions] updateStock error:", e instanceof Error ? e.message : String(e))
     throw e
   }
 
+  const updatedDb = await updateCatalogQuantity(workspaceId, store.id, req.sku, req.quantity)
+
   return {
     success:    true,
     simulation: false,
     sku:        req.sku,
     quantity:   req.quantity,
-    message:    `Stock updated to ${req.quantity}`,
+    message:    updatedDb
+      ? `Stock updated to ${req.quantity} on eBay and panel`
+      : `Stock updated to ${req.quantity} on eBay — panel catalog row not found for SKU`,
+    updatedDb,
   }
+}
+
+async function updateCatalogQuantity(
+  workspaceId: string,
+  storeId:     number,
+  sku:         string,
+  quantity:    number
+): Promise<boolean> {
+  const result = await query<{ id: number }>(
+    `UPDATE store_catalog_state
+     SET ebay_quantity = $1, updated_at = NOW()
+     WHERE workspace_id = $2
+       AND store_id = $3
+       AND internal_sku = $4
+     RETURNING id`,
+    [quantity, workspaceId, storeId, sku]
+  )
+  const catalogStateId = result.rows[0]?.id
+  if (catalogStateId) {
+    await afterManualQuantityChanged({
+      workspaceId,
+      storeId,
+      catalogStateId: Number(catalogStateId),
+      quantity,
+    })
+  }
+  return (result.rowCount ?? 0) > 0
 }
 
 // ─── UPDATE SOURCE URL ────────────────────────────────────────
@@ -215,6 +232,25 @@ export async function updateSourceUrl(
   sku: string,
   sourceUrl: string
 ): Promise<void> {
+  const before = await query<{
+    id: number
+    store_id: number
+    registry_asin: string | null
+    source_url: string | null
+    internal_sku: string | null
+  }>(
+    `SELECT scs.id,
+            scs.store_id,
+            ar.asin AS registry_asin,
+            scs.source_url,
+            scs.internal_sku
+     FROM store_catalog_state scs
+     LEFT JOIN asin_registry ar
+       ON ar.id = scs.asin_registry_id AND ar.workspace_id = scs.workspace_id
+     WHERE scs.workspace_id = $1
+       AND scs.internal_sku = $2`,
+    [workspaceId, sku]
+  )
   await query(
     `UPDATE store_catalog_state
      SET source_url = $1, updated_at = NOW()
@@ -222,6 +258,25 @@ export async function updateSourceUrl(
        AND internal_sku = $3`,
     [sourceUrl, workspaceId, sku]
   )
+  try {
+    const { resolveListingAsin } = await import("../monitor/listingAsinResolve")
+    const { emitKeepaAsinSyncForCatalog } = await import("../keepaSensor/keepaAsinSyncOutbox")
+    for (const row of before.rows) {
+      const previousAsin = resolveListingAsin({
+        registryAsin: row.registry_asin,
+        sourceUrl: row.source_url,
+        internalSku: row.internal_sku?.trim() ?? "",
+      })
+      await emitKeepaAsinSyncForCatalog({
+        workspaceId,
+        storeId: Number(row.store_id),
+        catalogStateId: Number(row.id),
+        previousAsins: [previousAsin],
+      })
+    }
+  } catch (e) {
+    console.warn("[keepa-asin-sync] emit failed:", e instanceof Error ? e.message : e)
+  }
 }
 
 // ─── BLIND ────────────────────────────────────────────────────
@@ -245,7 +300,8 @@ export async function blindListing(
       success:    true,
       simulation: true,
       sku:        req.sku,
-      message:    `[SIM] Listing blinded (qty=0)`,
+      message:    `[SIM] Listing blinded (qty=0) — panel DB not updated in simulation`,
+      updatedDb:  false,
     }
   }
 
@@ -255,7 +311,9 @@ export async function blindListing(
   // Set quantity to 0 — listing hidden from search
   await client.updateQuantity(req.sku, 0)
 
-  // Update DB
+  const updatedDb = await updateCatalogQuantity(workspaceId, store.id, req.sku, 0)
+
+  // Update pool stage when SKU encodes ASIN
   const { asin } = parseSku(req.sku)
   if (asin) await updatePoolListing(workspaceId, asin, { blinded: true })
 
@@ -263,6 +321,9 @@ export async function blindListing(
     success:    true,
     simulation: false,
     sku:        req.sku,
-    message:    `Listing blinded — quantity set to 0`,
+    message:    updatedDb
+      ? `Listing blinded — quantity set to 0 on eBay and panel`
+      : `Listing blinded on eBay — panel catalog row not found for SKU`,
+    updatedDb,
   }
 }

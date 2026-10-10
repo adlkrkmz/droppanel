@@ -85,7 +85,7 @@ export type EbayCreateOfferResponse = {
 export type EbayUpdateOfferRequest = {
   categoryId:          string
   pricingSummary:      EbayOfferPricingSummary
-  listingDescription:  string
+  listingDescription?: string
   listingPolicies:     EbayListingPolicies
   merchantLocationKey: string
 }
@@ -133,6 +133,7 @@ export type InventoryFlowResult = {
   ebayOfferId:          string | null
   ebayListingId:        string | null
   error:                string | null
+  missingAspectNames?:   string[]
   durationMs:           number
 }
 

@@ -1,5 +1,7 @@
 # DropPanel Runbook
 
+> **Etsy OAuth env:** ListJetGo Etsy Connection Manager uses `backend/.env` and `/api/etsy/*` — not the standalone Etsy project. See [docs/ETSY_OAUTH_ENV.md](./docs/ETSY_OAUTH_ENV.md).
+
 ## Senaryo 1: Queue Çalışmıyor
 **Belirtiler:** Telegram'dan "Queue Takıldı" uyarısı geldi, ürünler işlenmiyor.
 

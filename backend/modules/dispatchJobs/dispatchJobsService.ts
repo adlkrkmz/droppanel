@@ -14,14 +14,23 @@ import {
   getRunStatus as getRunStatusRepo,
   getActiveRuns as getActiveRunsRepo,
 } from "./dispatchJobsRepository"
+import { skipDispatchAiGenerate } from "../listingAiMode/listingAiModeService"
+import type { TitleMode } from "../titleBot/titleBotService"
 import type {
   ClaimNextJobResult,
-  CreateRunRequest,
   DispatchJob,
   DispatchRun,
+  DispatchTitleMode,
   RunStatusResult,
   ReportJobRequest,
 } from "./dispatchJobsTypes"
+
+/** Run-level titleMode (no DB migration); survives process lifetime only */
+const runTitleModeByRunId = new Map<number, DispatchTitleMode>()
+
+export function getDispatchRunTitleMode(runId: number): DispatchTitleMode {
+  return runTitleModeByRunId.get(runId) ?? "titlebot"
+}
 
 type FailureClassification = {
   permanent: boolean
@@ -153,6 +162,7 @@ type ClaimRow = Awaited<ReturnType<typeof claimNextJob>>
 type RunRow = Awaited<ReturnType<typeof updateRunCounters>>
 
 function mapRun(row: CreateRunRow): DispatchRun {
+  const titleMode = getDispatchRunTitleMode(row.id)
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -168,10 +178,13 @@ function mapRun(row: CreateRunRow): DispatchRun {
     startedAt: row.started_at,
     completedAt: row.completed_at,
     updatedAt: row.updated_at,
+    titleMode,
   }
 }
 
 function mapJob(row: NonNullable<ClaimRow>): DispatchJob {
+  const titleMode = getDispatchRunTitleMode(row.run_id)
+  const skipAi = skipDispatchAiGenerate(titleMode as TitleMode)
   return {
     id: row.id,
     runId: row.run_id,
@@ -195,6 +208,8 @@ function mapJob(row: NonNullable<ClaimRow>): DispatchJob {
     nextRetryAt: row.next_retry_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    titleMode,
+    skipAi,
   }
 }
 
@@ -203,11 +218,21 @@ export async function createRunWithJobs(
   storeCode: string,
   poolIds: number[],
   quantity: number,
-  delaySeconds: number
+  delaySeconds: number,
+  titleMode: TitleMode = "titlebot"
 ): Promise<DispatchRun> {
   if (quantity < 1) throw new Error("quantity must be >= 1")
   if (delaySeconds < 0) throw new Error("delaySeconds must be >= 0")
   if (!Array.isArray(poolIds) || poolIds.length === 0) throw new Error("poolIds must be non-empty")
+
+  const { splitEligiblePoolItems, buildPoolEligibilityWhere } =
+    await import("../pool/poolEligibilityService")
+  const split = await splitEligiblePoolItems(workspaceId, poolIds)
+  if (split.eligibleIds.length === 0) {
+    throw new Error("No eligible pool items to dispatch.")
+  }
+  const eligiblePoolIds = split.eligibleIds
+  const eligibilityWhere = buildPoolEligibilityWhere("ap")
 
   const storeResult = await query<{ id: number; name: string }>(
     `SELECT id, name FROM stores
@@ -225,8 +250,9 @@ export async function createRunWithJobs(
      FROM asin_pool ap
      INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
      WHERE ap.workspace_id = $1
-       AND ap.id = ANY($2::bigint[])`,
-    [workspaceId, poolIds]
+       AND ap.id = ANY($2::bigint[])
+       AND ${eligibilityWhere}`,
+    [workspaceId, eligiblePoolIds]
   )
 
   function resolveJobType(stage: string): string {
@@ -261,6 +287,7 @@ export async function createRunWithJobs(
 
   const updated = startedRun.rows[0]
   if (!updated) throw new Error("Failed to update dispatch_runs to running")
+  runTitleModeByRunId.set(updated.id, titleMode as DispatchTitleMode)
   try {
     await addNotification(
       workspaceId,
@@ -351,9 +378,15 @@ export async function reportProgress(
     const poolId = jobRow.pool_id
     try {
       await query(`UPDATE dispatch_jobs SET pool_id = NULL WHERE pool_id = $1`, [poolId])
-      await query(`DELETE FROM asin_pool WHERE id = $1`, [poolId])
+      const { softArchivePoolItems } = await import("../pool/poolPrimeGuardService")
+      await softArchivePoolItems(
+        jobRow.workspace_id,
+        [poolId],
+        "DISPATCH_JOB_TERMINAL_FAIL",
+        "dispatch_jobs"
+      )
     } catch (e: unknown) {
-      console.warn(`[dispatchJobs] Failed to delete asin_pool id=${poolId}:`, e)
+      console.warn(`[dispatchJobs] Failed to archive asin_pool id=${poolId}:`, e)
     }
   }
 

@@ -18,8 +18,23 @@ export type AmazonProductData = {
   reviews:         number
   bsr:             number | null
   category:        string
-  isPrime:         boolean
+  isPrime:         boolean | null
   isFreeShipping:  boolean
+  availabilityText?: string
+  hasAddToCart?:    boolean
+  hasBuyNow?:       boolean
+  /** Explicit Prime status from Buy Box detector: PRIME | NOT_PRIME | UNKNOWN */
+  primeStatus?:     string | null
+  primeEvidence?:   string[]
+  primeCheckedAt?:  string | null
+  /** Selected Buy Box / page ASIN for integrity checks */
+  selectedAsin?:    string | null
+  pageUrlAsin?:     string | null
+  /** Selected-offer stock: IN_STOCK | LIMITED_STOCK | OUT_OF_STOCK | UNKNOWN */
+  stockStatus?:     string | null
+  stockCount?:      number | null
+  stockEvidence?:   string[]
+  stockCheckedAt?:  string | null
 }
 
 /** POST body — tek ürün (Extension sayfa bazlı gönderir) */
@@ -33,6 +48,7 @@ export type ProductExtractorSuccessResponse = {
   success:         true
   asin:            string
   asinRegistryId:  number
+  poolId:          number | null
   cacheCreated:    boolean
 }
 

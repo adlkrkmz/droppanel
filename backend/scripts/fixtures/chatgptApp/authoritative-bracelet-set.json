@@ -1,0 +1,189 @@
+{
+  "sourceUrl": "https://www.amazon.com/dp/B0C36VL5ZP",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "amazon",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "Boho Bracelet Set Gold Plated Layering Bracelets for Women",
+    "selectedOption": "Piece Bracelet Set / Gold",
+    "materials": [
+      "Gold plated alloy"
+    ],
+    "colors": [
+      "Gold"
+    ],
+    "specifications": [
+      "Bracelet set",
+      "Gold finish",
+      "Lobster clasps",
+      "Extender chains"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "jewelry",
+    "productType": "bracelet set",
+    "isSet": true,
+    "selectedVariation": {
+      "rawLabel": "Piece Bracelet Set / Gold",
+      "displayLabel": "Bracelet Set / Gold",
+      "confidence": "high"
+    },
+    "keyPhysicalFeatures": [
+      "layering bracelets",
+      "gold finish",
+      "extender chains"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "e1",
+      "field": "selectedOption",
+      "value": "Piece Bracelet Set / Gold",
+      "scope": "selected_option",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "e2",
+      "field": "plating",
+      "value": "Gold plated",
+      "scope": "selected_spec",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "outputReady": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true
+  },
+  "generatedContent": {
+    "title": "Gold Layering Bracelet Set with Extender Chains",
+    "description": {
+      "openingParagraph": "✨ This gold layering bracelet set brings together complementary bracelet styles for an easy stacked look.",
+      "bodyParagraphs": [
+        "The selected gold finish keeps the set coordinated while remaining light enough for everyday wear."
+      ],
+      "productDetails": [
+        {
+          "label": "Style",
+          "value": "Bracelet set / Gold",
+          "evidenceIds": [
+            "e1"
+          ]
+        },
+        {
+          "label": "Finish",
+          "value": "Gold plated",
+          "evidenceIds": [
+            "e2"
+          ]
+        },
+        {
+          "label": "Closure",
+          "value": "Lobster clasps"
+        },
+        {
+          "label": "Adjustability",
+          "value": "Extender chains"
+        }
+      ],
+      "careTip": "Store dry and wipe gently after wear to keep the finish polished.",
+      "optionalSections": [
+        {
+          "heading": "Gift & Styling Ideas",
+          "bullets": [
+            "A simple option for stacking on its own or mixing with other everyday bracelets."
+          ]
+        }
+      ]
+    },
+    "tags": [
+      "gold bracelet set",
+      "layering bracelets",
+      "stackable bracelets",
+      "gold plated set",
+      "boho bracelet set",
+      "everyday bracelets",
+      "lobster clasp set",
+      "extender bracelet",
+      "wrist stack set",
+      "gift bracelet set",
+      "gold tone jewelry",
+      "layered wrist look",
+      "bracelet gift set"
+    ],
+    "materials": [
+      {
+        "value": "Gold plated alloy",
+        "evidenceIds": [
+          "e2"
+        ]
+      }
+    ],
+    "categorySuggestion": "Jewelry & Accessories > Bracelets > Beaded Bracelets",
+    "primaryColor": "Gold",
+    "sourceSupportedInformation": [
+      "The selected source supports a gold bracelet set finish with lobster clasps and extender chains."
+    ],
+    "missingInformation": [
+      "None identified from the available source."
+    ]
+  }
+}

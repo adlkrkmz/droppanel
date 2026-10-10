@@ -1,37 +1,21 @@
 import type { Metadata } from "next"
 import "./globals.css"
-import Sidebar from "@/components/layout/Sidebar"
-import Topbar  from "@/components/layout/Topbar"
+import "@/components/public/homepage/homepage-entry.css"
 import { StoreProvider } from "@/lib/storeContext"
 import { ToastProvider } from "@/lib/toastContext"
-import NotificationCenter from "@/components/NotificationCenter"
 
 export const metadata: Metadata = {
-  title:       "ListPanel",
-  description: "eBay Listing Pipeline — Admin Panel",
+  title: "ListJetGo",
+  description:
+    "AI-powered product discovery, saturation analysis, and multi-store dispatch — operations platform for ecommerce sellers.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-bg text-text font-body antialiased">
         <StoreProvider>
-          <ToastProvider>
-            <Sidebar />
-            <Topbar />
-            <main
-              style={{
-                marginLeft: "208px",
-                marginTop:  "56px",
-                minHeight:  "calc(100vh - 56px)",
-                padding:    "28px 32px",
-                background: "var(--bg)",
-              }}
-            >
-              {children}
-            </main>
-            <NotificationCenter />
-          </ToastProvider>
+          <ToastProvider>{children}</ToastProvider>
         </StoreProvider>
       </body>
     </html>

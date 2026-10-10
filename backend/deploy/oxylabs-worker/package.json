@@ -1,0 +1,10 @@
+{
+  "name": "listjetgo-oxylabs-worker",
+  "version": "1.0.2",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node oxylabs-verify-worker.mjs"
+  }
+}

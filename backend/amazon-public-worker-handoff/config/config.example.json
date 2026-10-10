@@ -1,0 +1,9 @@
+{
+  "amazonHeadless": false,
+  "navigationTimeout": 30000,
+  "amazonMode": "FAILOVER",
+  "amazonWorkers": ["A", "B", "C"],
+  "amazonActiveConcurrency": 1,
+  "amazonDelayMs": 2500,
+  "technicalRetryMax": 1
+}

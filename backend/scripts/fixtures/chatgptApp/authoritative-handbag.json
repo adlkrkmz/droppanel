@@ -1,0 +1,179 @@
+{
+  "sourceUrl": "https://supplier.example/bags/tote-1",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "supplier_site",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "Genuine Leather Tote Bag Brown",
+    "materials": [
+      "Genuine Leather"
+    ],
+    "dimensions": [
+      "14 x 11 x 5 inches"
+    ],
+    "colors": [
+      "Brown"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "handbag",
+    "productType": "tote bag",
+    "isSet": false,
+    "selectedVariation": {
+      "displayLabel": "Brown",
+      "confidence": "high"
+    },
+    "keyPhysicalFeatures": [
+      "genuine leather",
+      "tote silhouette"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "h1",
+      "field": "baseMetal",
+      "value": "Genuine Leather",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "h2",
+      "field": "dimensions",
+      "value": "14 x 11 x 5 inches",
+      "scope": "dimensions",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "outputReady": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true
+  },
+  "generatedContent": {
+    "title": "Brown Genuine Leather Tote Bag for Everyday Carry",
+    "description": {
+      "openingParagraph": "✨ This brown genuine leather tote bag is built for everyday carry with a clean open silhouette.",
+      "bodyParagraphs": [
+        "The structured tote shape keeps essentials easy to reach without a bulky profile."
+      ],
+      "productDetails": [
+        {
+          "label": "Material",
+          "value": "Genuine Leather",
+          "evidenceIds": [
+            "h1"
+          ]
+        },
+        {
+          "label": "Dimensions",
+          "value": "14 x 11 x 5 inches",
+          "evidenceIds": [
+            "h2"
+          ]
+        },
+        {
+          "label": "Color",
+          "value": "Brown"
+        }
+      ],
+      "careTip": "Wipe leather gently and condition it occasionally to keep the bag looking polished.",
+      "optionalSections": [
+        {
+          "heading": "Styling & Everyday Use",
+          "bullets": [
+            "Works as a daily carry tote for work, errands, or weekend outings."
+          ]
+        }
+      ]
+    },
+    "tags": [
+      "leather tote bag",
+      "brown tote bag",
+      "genuine leather tote",
+      "everyday tote bag",
+      "work tote bag",
+      "open tote bag",
+      "brown leather bag",
+      "carryall tote",
+      "simple leather tote",
+      "shoulder tote bag",
+      "gift leather tote",
+      "classic tote bag",
+      "soft leather tote"
+    ],
+    "materials": [
+      {
+        "value": "Genuine Leather",
+        "evidenceIds": [
+          "h1"
+        ]
+      }
+    ],
+    "categorySuggestion": "Bags & Purses > Handbags > Totes",
+    "primaryColor": "Brown",
+    "sourceSupportedInformation": [
+      "The selected source supports a brown genuine leather tote with listed dimensions."
+    ],
+    "missingInformation": [
+      "None identified from the available source."
+    ]
+  }
+}

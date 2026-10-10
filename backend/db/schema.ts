@@ -13,7 +13,11 @@ export const Tables = {
   KEYWORD_BLACKLIST: "keyword_blacklist",
   ASIN_LOCKS: "asin_locks",
   AMAZON_PRODUCT_CACHE: "amazon_product_cache",
-  AI_LISTING_CACHE: "ai_listing_cache"
+  AI_LISTING_CACHE: "ai_listing_cache",
+  GLOBAL_AMAZON_ASINS: "global_amazon_asins",
+  GLOBAL_ASIN_CONSUMERS: "global_asin_consumers",
+  GLOBAL_KEEPA_SNAPSHOTS: "global_keepa_snapshots",
+  KEEPA_PLATFORM_TOKEN_STATE: "keepa_platform_token_state",
 } as const
 
 export const Enums = {

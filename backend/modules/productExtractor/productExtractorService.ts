@@ -16,7 +16,7 @@ import type {
   ProductExtractorErrorResponse,
 } from "./productExtractorTypes"
 
-const ASIN_REGEX = /^([A-Z0-9]{10}|TEMU[0-9]+|ALI[0-9]+)$/
+const ASIN_REGEX = /^[A-Z0-9]{10}$/
 
 function normalizeAsin(asin: string): string {
   return asin.trim().toUpperCase()
@@ -65,7 +65,7 @@ function sanitizeBrand(brand: string): string {
 
 /** Extension payload'ını cache satırına uygun attributes objesine dönüştürür */
 function toCacheAttributes(req: ProductExtractorRequest): Record<string, unknown> {
-  return {
+  const attrs: Record<string, unknown> = {
     bullets:         req.bullets,
     description:     req.description,
     specs:           req.specs,
@@ -73,10 +73,32 @@ function toCacheAttributes(req: ProductExtractorRequest): Record<string, unknown
     reviews:         req.reviews,
     bsr:             req.bsr,
     category:        req.category,
-    isPrime:         req.isPrime,
+    isPrime:         req.isPrime === true ? true : req.isPrime === false ? false : null,
     isFreeShipping:  req.isFreeShipping,
     currency:        req.currency,
+    source:          req.source ?? "extension",
   }
+  if (req.availabilityText != null) attrs.availabilityText = req.availabilityText
+  if (req.hasAddToCart != null) attrs.hasAddToCart = req.hasAddToCart
+  if (req.hasBuyNow != null) attrs.hasBuyNow = req.hasBuyNow
+  if (req.primeStatus != null) attrs.primeStatus = req.primeStatus
+  if (req.primeEvidence != null) attrs.primeEvidence = req.primeEvidence
+  if (req.primeCheckedAt != null) attrs.primeCheckedAt = req.primeCheckedAt
+  if (req.selectedAsin != null) attrs.selectedAsin = req.selectedAsin
+  if (req.pageUrlAsin != null) attrs.pageUrlAsin = req.pageUrlAsin
+  if (req.stockStatus != null) attrs.stockStatus = req.stockStatus
+  if (req.stockCount != null) attrs.stockCount = req.stockCount
+  if (req.stockEvidence != null) attrs.stockEvidence = req.stockEvidence
+  if (req.stockCheckedAt != null) attrs.stockCheckedAt = req.stockCheckedAt
+  const ext = req as ProductExtractorRequest & {
+    stockText?: string; primeText?: string; deliveryText?: string; capturedAt?: string; amazonUrl?: string
+  }
+  if (ext.stockText != null) attrs.stockText = ext.stockText
+  if (ext.primeText != null) attrs.primeText = ext.primeText
+  if (ext.deliveryText != null) attrs.deliveryText = ext.deliveryText
+  if (ext.capturedAt != null) attrs.capturedAt = ext.capturedAt
+  if (ext.amazonUrl != null) attrs.amazonUrl = ext.amazonUrl
+  return attrs
 }
 
 /** workspace_id + asin ile asin_registry id bulur; yoksa null */
@@ -161,6 +183,47 @@ async function upsertCache(
   return !wasExisting
 }
 
+async function fetchPoolId(
+  workspaceId:    string,
+  asinRegistryId: number
+): Promise<number | null> {
+  const result = await query<{ id: number }>(
+    `SELECT id FROM asin_pool
+     WHERE workspace_id = $1 AND asin_registry_id = $2
+     LIMIT 1`,
+    [workspaceId, asinRegistryId]
+  )
+  const raw = result.rows[0]?.id
+  if (raw == null) return null
+  return typeof raw === "string" ? parseInt(raw, 10) : raw
+}
+
+/** Live runner simulation cache can mark pool scraped too early — reset before real extension extract. */
+async function repairPoolStageIfSimulationOnlyCache(
+  workspaceId:    string,
+  asinRegistryId: number
+): Promise<void> {
+  await query(
+    `UPDATE asin_pool ap
+     SET pipeline_stage = 'validated',
+         scrape_status = 'pending',
+         updated_at = NOW()
+     FROM amazon_product_cache apc
+     WHERE ap.workspace_id = $1
+       AND ap.asin_registry_id = $2
+       AND apc.asin_registry_id = ap.asin_registry_id
+       AND ap.pipeline_stage = 'scraped'
+       AND (
+         apc.attributes->>'source' = 'simulation'
+         OR EXISTS (
+           SELECT 1 FROM jsonb_array_elements_text(apc.images) img
+           WHERE img ILIKE '%example.com%'
+         )
+       )`,
+    [workspaceId, asinRegistryId]
+  )
+}
+
 /**
  * asinImportService.insertPool ile aynı kolon seti;
  * pipeline_stage: scraped, scrape_status: success (Amazon verisi yazıldı).
@@ -184,9 +247,12 @@ async function insertPoolAfterScrape(
        NOW(), NOW()
      )
      ON CONFLICT (workspace_id, asin_registry_id) DO UPDATE SET
-       scrape_status  = 'success',
+       scrape_status     = 'success',
+       status            = 'ready',
+       listing_status    = 'pending',
+       assigned_store_id = NULL,
        pipeline_stage = CASE
-         WHEN asin_pool.pipeline_stage IN ('imported', 'validated')
+         WHEN asin_pool.pipeline_stage IN ('imported', 'validated', 'listed')
          THEN 'scraped'
          ELSE asin_pool.pipeline_stage
        END,
@@ -205,6 +271,10 @@ export async function extractAndSaveProduct(
 ): Promise<ProductExtractorResponse> {
   console.log(`[ProductExtractor] Received: asin=${req.asin} price=${req.price} title="${(req.title ?? '').slice(0, 50)}" images=${Array.isArray(req.images) ? req.images.length : 0}`)
   const asin = normalizeAsin(req.asin ?? "")
+  const source = String(req.source ?? "amazon").trim().toLowerCase()
+  if (source !== "amazon" && source !== "extension") {
+    return { success: false, error: "Only Amazon product extraction is supported" }
+  }
   if (!asin) {
     const err: ProductExtractorErrorResponse = { success: false, error: "asin is required" }
     return err
@@ -212,7 +282,7 @@ export async function extractAndSaveProduct(
   if (!ASIN_REGEX.test(asin)) {
     const err: ProductExtractorErrorResponse = {
       success: false,
-      error:   `Invalid ASIN format: ${asin}. Must be 10 alphanumeric characters or a Temu ASIN (TEMU + numeric ID).`,
+      error:   `Invalid Amazon ASIN format: ${asin}. Must be 10 alphanumeric characters.`,
     }
     return err
   }
@@ -232,12 +302,15 @@ export async function extractAndSaveProduct(
   }
 
   try {
+    await repairPoolStageIfSimulationOnlyCache(workspaceId, asinRegistryId)
     const cacheCreated = await upsertCache(asinRegistryId, req)
     await insertPoolAfterScrape(workspaceId, asinRegistryId)
+    const poolId = await fetchPoolId(workspaceId, asinRegistryId)
     const success: ProductExtractorSuccessResponse = {
       success:         true,
       asin,
       asinRegistryId,
+      poolId,
       cacheCreated,
     }
     try {

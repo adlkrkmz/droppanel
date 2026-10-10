@@ -26,13 +26,15 @@ module.exports = {
       }
     },
     {
-      name: 'droppanel-panel',
-      cwd: './panel',
-      script: 'node',
-      args: 'node_modules/next/dist/bin/next dev',
+      name: 'amazon-browser-worker',
+      script: 'amazon-browser-worker.ts',
+      interpreter: 'ts-node',
+      watch: false,
+      autorestart: false,
+      max_restarts: 0,
       env: {
-        PORT: 3000,
-        NODE_ENV: 'development'
+        NODE_ENV: 'production',
+        AMAZON_AUTH_WORKER_DISABLED: 'true'
       }
     }
   ]

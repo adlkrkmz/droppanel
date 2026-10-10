@@ -1,0 +1,182 @@
+{
+  "sourceUrl": "https://supplier.example/art/marker-set-1",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "supplier_site",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "48 Color Dual Tip Alcohol Markers Art Set",
+    "materials": [
+      "Alcohol-based ink"
+    ],
+    "colors": [
+      "Multicolor"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "craft",
+    "productType": "marker set",
+    "isSet": true,
+    "setCount": 48,
+    "selectedVariation": {
+      "displayLabel": "48 Colors",
+      "confidence": "high"
+    },
+    "keyPhysicalFeatures": [
+      "dual tip",
+      "alcohol markers",
+      "48 colors"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "a1",
+      "field": "packageInclusion",
+      "value": "48 color dual tip markers",
+      "scope": "selected_title",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "a2",
+      "field": "ink",
+      "value": "Alcohol-based ink",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "outputReady": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true
+  },
+  "generatedContent": {
+    "title": "48 Color Dual Tip Alcohol Marker Set for Illustration",
+    "description": {
+      "openingParagraph": "🎨 Build smooth blends and clean line work with this 48-color dual tip alcohol marker set made for everyday illustration practice.",
+      "bodyParagraphs": [
+        "The dual tips help you switch between broader fills and finer details without changing tools mid-sketch."
+      ],
+      "productDetails": [
+        {
+          "label": "Quantity",
+          "value": "48 markers",
+          "evidenceIds": [
+            "a1"
+          ]
+        },
+        {
+          "label": "Tip type",
+          "value": "Dual tip",
+          "evidenceIds": [
+            "a1"
+          ]
+        },
+        {
+          "label": "Ink",
+          "value": "Alcohol-based ink",
+          "evidenceIds": [
+            "a2"
+          ]
+        }
+      ],
+      "careTip": "Cap markers after use and store them horizontally.",
+      "optionalSections": [
+        {
+          "heading": "Creative Uses",
+          "bullets": [
+            "Use for sketchbook studies, design-class drills, and layered color practice.",
+            "Switch between broader fills and finer line work with the dual tips."
+          ]
+        }
+      ]
+    },
+    "tags": [
+      "alcohol marker set",
+      "dual tip markers",
+      "48 color markers",
+      "art marker set",
+      "illustration markers",
+      "blendable markers",
+      "sketch marker set",
+      "drawing marker set",
+      "design class markers",
+      "creative art set",
+      "marker gift set",
+      "coloring markers",
+      "artist marker pack"
+    ],
+    "materials": [
+      {
+        "value": "Alcohol-based ink",
+        "evidenceIds": [
+          "a2"
+        ]
+      }
+    ],
+    "categorySuggestion": "Craft Supplies & Tools > Painting & Drawing & Art",
+    "primaryColor": "Multicolor",
+    "sourceSupportedInformation": [
+      "The selected source supports a 48-color dual tip alcohol marker set."
+    ],
+    "missingInformation": [
+      "None identified from the available source."
+    ]
+  }
+}

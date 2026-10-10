@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 export type MonitorItem = {
+  catalogStateId: number | null
   sku:         string
   title:       string
   ebayItemId:  string | null
@@ -15,10 +16,41 @@ export type MonitorItem = {
   asin:        string | null
   image:       string | null
   sourceUrl:   string | null
+  listedAt:    string | null
+  currentStatus: string | null
+  stockGuardEnabled:  boolean
+  panelHiddenAt:      string | null
+  sourceStatus:       string | null
+  sourceStatusReason: string | null
+  sourcePrice:        number | null
+  sourceCheckedAt:    string | null
+  botZeroedAt:        string | null
+  botZeroedReason:    string | null
+  botZeroedBy:        string | null
+  totalSold:          number | null
+  sold30d:            number | null
+  clicks30d:          number | null
+  clicks30dCheckedAt: string | null
+  views30d:           number | null
+  impressions30d:     number | null
+  watchCount:         number | null
+  metricsSyncedAt:    string | null
+  metricsSource:      string | null
+  metricsError:       string | null
+  autoPriceProtectedAt: string | null
+}
+
+export type GetMonitorListingsOptions = {
+  includeHidden?: boolean
+  search?:     string
+  status?:      string
+  sortBy?:       string
+  sortDir?:      string
 }
 
 export type MonitorListingsResult = {
   store:              string
+  /** Filtered result count (pagination total) */
   total:              number
   ebayInventoryTotal: number
   tracked:            number
@@ -28,6 +60,15 @@ export type MonitorListingsResult = {
   generatedAt:        string
   currentPage:        number
   totalPages:         number
+  pageSize:           number
+  appliedSortBy?:      string | null
+  appliedSortDir?:     string | null
+  storeSync?: {
+    lastCatalogSyncAt: string | null
+    lastMetricsSyncAt: string | null
+    syncStatus:        string | null
+    syncError:         string | null
+  }
 }
 
 // eBay Inventory API response shapes (simplified)

@@ -1,0 +1,25 @@
+{
+  "name": "listjetgo-amazon-scan-worker",
+  "version": "1.0.5",
+  "private": true,
+  "description": "Remote unauthenticated Amazon scan worker (no PostgreSQL, no eBay)",
+  "main": "amazon-scan-worker.ts",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "ts-node --transpile-only amazon-scan-worker.ts",
+    "verify": "ts-node --transpile-only scripts/verify-amazon-scan-worker.ts",
+    "bench": "ts-node --transpile-only scripts/amazon-scan-layout-bench.ts"
+  },
+  "dependencies": {
+    "dotenv": "17.3.1",
+    "playwright": "1.62.1",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "25.4.0"
+  }
+}

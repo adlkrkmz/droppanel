@@ -1,0 +1,53 @@
+{
+  "sourceUrl": "https://www.amazon.com/dp/B0FNRBB1QZ",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "amazon",
+  "sourceEvidence": {
+    "title": "1.2CT Rose Heart Necklace with Lab-Grown Ruby, S925 Sterling Silver, White Gold Plated, Engraved I Love You",
+    "description": "Parent page also mentions moissanite and sapphire options for other variations. Lab-grown ruby center stone for the selected style.",
+    "selectedOption": "01/07 - Ruby",
+    "materials": [
+      "Lab-Grown Ruby",
+      "S925 Sterling Silver",
+      "18K white gold plating over 925 silver"
+    ],
+    "colors": ["Red", "Silver"],
+    "dimensions": [
+      "18.5-inch chain with a 2-inch extender",
+      "Pendant size 0.94 × 0.71 inches",
+      "Stone 7 × 7 mm",
+      "1.2 ct"
+    ],
+    "specifications": [
+      "Lab-grown ruby",
+      "Created ruby",
+      "Heart shape",
+      "Prong setting",
+      "Lobster clasp",
+      "This item is not hypoallergenic",
+      "Engraved I Love You message"
+    ],
+    "verifiedFacts": ["Main stone: Lab-Grown Ruby", "Metal: 925 Sterling Silver"],
+    "missingFacts": [
+      "Live source price was not captured.",
+      "Exact Amazon price was not visible in the directly read page.",
+      "Country of manufacture not verified",
+      "Etsy handmade eligibility and production-partner details require seller confirmation."
+    ]
+  },
+  "generatedContent": {
+    "title": "Red / Silver Rose Heart Necklace, 925 Sterling Silver Pendant with I Love You Engraving",
+    "description": "This red / silver rose heart necklace features a pendant. status is not stated.",
+    "tags": [
+      "red silver rose",
+      "red silver pendant",
+      "july birthstone",
+      "grown ruby",
+      "love engraving"
+    ],
+    "materials": ["Solid Gold", "Natural Ruby"],
+    "primaryColor": "White/silver tone",
+    "secondaryColor": "Gold",
+    "categorySuggestion": "Women's pendant necklace / necklace"
+  }
+}

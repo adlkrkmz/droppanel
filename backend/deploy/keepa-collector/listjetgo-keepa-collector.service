@@ -1,0 +1,19 @@
+[Unit]
+Description=ListJetGo Keepa collector (inactive by default)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=listjetgo
+WorkingDirectory=/opt/listjetgo-keepa-collector
+EnvironmentFile=-/opt/listjetgo-keepa-collector/.env
+ExecStart=/usr/bin/npx ts-node --transpile-only keepa-collector.ts
+Restart=always
+RestartSec=5
+# Do not enable this unit until a later cutover.
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { query } from "../../db/client"
+import { buildPoolEligibilityWhere } from "../pool/poolEligibilityService"
 import type { DispatchCandidate, StoreRow } from "./dispatchTypes"
 
 // ─── STORE BULMAK ─────────────────────────────────────────────
@@ -50,6 +51,7 @@ export async function fetchDispatchCandidates(
        AND ap.status            = 'ready'
        AND ap.assigned_store_id IS NULL
        AND ap.pipeline_stage    IN ('validated', 'scraped', 'ai_generated')
+       AND ${buildPoolEligibilityWhere("ap")}
      ORDER BY RANDOM()
      LIMIT $2`,
     [workspaceId, limit]
@@ -67,27 +69,30 @@ export async function fetchDispatchCandidates(
 // store_catalog_state + listing_history üzerinden kontrol
 
 export async function fetchAlreadyListedAsins(
-  workspaceId: string,
-  storeId:     number
+  workspaceId: string
 ): Promise<Set<string>> {
-  // store_catalog_state
+  // All active listings in all active stores connected to this workspace.
   const catalogResult = await query<{ asin: string }>(
     `SELECT ar.asin
      FROM store_catalog_state scs
+     INNER JOIN stores s ON s.id = scs.store_id AND s.workspace_id = scs.workspace_id
      INNER JOIN asin_registry ar ON ar.id = scs.asin_registry_id
      WHERE scs.workspace_id = $1
-       AND scs.store_id     = $2`,
-    [workspaceId, storeId]
+       AND s.status = 'active'
+       AND scs.current_status = 'live'`,
+    [workspaceId]
   )
 
-  // listing_history
+  // Fallback for a just-published listing whose catalog sync has not completed.
   const historyResult = await query<{ asin: string }>(
     `SELECT ar.asin
      FROM listing_history lh
+     INNER JOIN stores s ON s.id = lh.store_id AND s.workspace_id = lh.workspace_id
      INNER JOIN asin_registry ar ON ar.id = lh.asin_registry_id
      WHERE lh.workspace_id = $1
-       AND lh.store_id     = $2`,
-    [workspaceId, storeId]
+       AND s.status = 'active'
+       AND lh.status = 'live'`,
+    [workspaceId]
   )
 
   const asins = new Set<string>()

@@ -1,0 +1,2 @@
+ALTER TABLE store_catalog_state
+  ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT NULL;
