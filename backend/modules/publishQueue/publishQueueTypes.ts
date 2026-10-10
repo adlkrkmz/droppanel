@@ -22,6 +22,8 @@ export type PublishItemResult = {
   guardScore:    number | null
   guardErrors:   string[]
   guardWarnings: string[]
+  /** eBay listing/item id from publish success response when available */
+  ebayListingId?: string | null
 }
 
 export type TimedPublishRunResult = {
@@ -41,8 +43,12 @@ export type TimedPublishRunResult = {
   totalMs:      number
 }
 
+export type TitleMode = "titlebot" | "ai" | "original"
+
 export type TimedPublishOptions = {
   storeCode:       string
+  /** Preferred when provided; avoids ambiguous storeCode within a workspace. */
+  storeId?:        number
   workspaceId:     string
   delaySeconds:    number
   limit:           number
@@ -51,7 +57,19 @@ export type TimedPublishOptions = {
   ebayOauthToken:  string
   ebaySandbox:     boolean
   simulationMode:  boolean
+  titleMode?:      TitleMode
   // Listing run akışında dispatch edilen poolId'leri doğrudan hedefle.
   // Verilirse fetchPublishQueueForStore atlanır, sadece bu ID'ler işlenir.
   targetPoolIds?:  number[]
+  /** e.g. scheduled_live_single_job — enforces single-pool publish safety */
+  source?:         string
+  /** Direct List retains the pool for a fresh capture retry on availability failure. */
+  archiveAvailabilityFailures?: boolean
+  /** Direct List only: unknown stock is observable but not a stock block. */
+  allowUnknownStockForDirectList?: boolean
+  promotion?: {
+    enabled?: boolean
+    adRatePercent?: number | null
+    adFeeTaxPercent?: number | null
+  } | null
 }

@@ -1,4 +1,4 @@
-import { db } from "../../db/client"
+import { db, query } from "../../db/client"
 import {
   getPendingScrapeCandidates,
   markPoolAsScraped,
@@ -120,6 +120,147 @@ export async function runAmazonScraperSimulation(
   } catch (error) {
     await client.query("ROLLBACK")
     throw error
+  } finally {
+    client.release()
+  }
+}
+
+type SinglePoolScrapeRow = {
+  poolId:         number
+  asinRegistryId: number
+  asin:           string
+  registryTitle:  string | null
+  registryBrand:  string | null
+  pipelineStage:  string
+  scrapeStatus:   string
+}
+
+export type ScrapeSinglePoolResult = {
+  ok:               boolean
+  createdOrUpdated: boolean
+  message?:         string
+}
+
+export type ScrapeSinglePoolOptions = {
+  /** Live runner: only fill cache; do not change asin_pool pipeline/scrape_status. */
+  preservePoolStage?: boolean
+}
+
+function isRealAmazonCacheRow(row: {
+  source:     string | null
+  images:     unknown
+  attributes: unknown
+}): boolean {
+  if (row.source === "amazon") return true
+  const attrs = row.attributes as Record<string, unknown> | null
+  if (attrs?.source === "simulation") return false
+  const images = Array.isArray(row.images) ? row.images : []
+  return images.some(
+    (u) => typeof u === "string" && /amazon|media-amazon|ssl-images-amazon/i.test(u)
+  )
+}
+
+/** Worker scrape path for one pool item — creates amazon_product_cache when missing. */
+export async function scrapeSinglePoolItemById(
+  workspaceId: string,
+  poolId:      number,
+  opts:        ScrapeSinglePoolOptions = {}
+): Promise<ScrapeSinglePoolResult> {
+  const result = await query<SinglePoolScrapeRow>(
+    `SELECT
+       ap.id AS "poolId",
+       ap.asin_registry_id AS "asinRegistryId",
+       ar.asin AS "asin",
+       ar.title AS "registryTitle",
+       ar.brand AS "registryBrand",
+       ap.pipeline_stage::text AS "pipelineStage",
+       ap.scrape_status::text AS "scrapeStatus"
+     FROM asin_pool ap
+     INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
+     WHERE ap.workspace_id = $1 AND ap.id = $2
+     LIMIT 1`,
+    [workspaceId, poolId]
+  )
+
+  const row = result.rows[0]
+  if (!row) {
+    return { ok: false, createdOrUpdated: false, message: "Pool item not found" }
+  }
+
+  const cacheCheck = await query<{
+    title:       string | null
+    brand:       string | null
+    price:      number | null
+    images:     unknown
+    source:     string | null
+    attributes: unknown
+  }>(
+    `SELECT title, brand, price, images, source, attributes
+     FROM amazon_product_cache
+     WHERE asin_registry_id = $1
+     LIMIT 1`,
+    [row.asinRegistryId]
+  )
+
+  const existing = cacheCheck.rows[0]
+  const existingAttributes = existing?.attributes && typeof existing.attributes === "object"
+    ? existing.attributes as Record<string, unknown>
+    : null
+  const existingIsExtension = !!existing && (
+    existing.source === "extension" || existingAttributes?.source === "extension"
+  )
+  const images = Array.isArray(existing?.images) ? existing.images : []
+  if (existing && Number(existing.price) > 0 && images.length > 0) {
+    if (isRealAmazonCacheRow(existing)) {
+      return { ok: true, createdOrUpdated: false, message: "Extension Amazon cache already present" }
+    }
+    if (opts.preservePoolStage) {
+      return { ok: true, createdOrUpdated: false, message: "Cache already present" }
+    }
+  }
+
+  const client = (await db.connect()) as TxClient
+  try {
+    await client.query("BEGIN")
+
+    const fakeData = generateFakeScrapedData({ asin: row.asin })
+    if (row.registryTitle?.trim()) fakeData.title = row.registryTitle.trim().slice(0, 200)
+    if (row.registryBrand?.trim()) fakeData.brand = row.registryBrand.trim()
+
+    // Simulation may fill missing images, but must not replace identity/pricing
+    // already captured from the extension.
+    if (existingIsExtension) {
+      if (existing?.title?.trim()) fakeData.title = existing.title.trim().slice(0, 200)
+      if (existing?.brand?.trim()) fakeData.brand = existing.brand.trim()
+      if (existing?.price != null && Number(existing.price) > 0) fakeData.price = Number(existing.price)
+    }
+
+    await upsertAmazonProductCache(client, row.asinRegistryId, fakeData)
+    await updateAsinRegistryMetadata(client, row.asinRegistryId, fakeData)
+
+    if (!opts.preservePoolStage) {
+      if (row.pipelineStage === "validated" || row.scrapeStatus === "pending") {
+        await markPoolAsScraped(client, row.poolId)
+      } else {
+        await client.query(
+          `UPDATE asin_pool
+           SET scrape_status = 'success',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [row.poolId]
+        )
+      }
+    }
+
+    await client.query("COMMIT")
+    return { ok: true, createdOrUpdated: true, message: "Amazon product cache prepared" }
+  } catch (e) {
+    await client.query("ROLLBACK")
+    return {
+      ok: false,
+      createdOrUpdated: false,
+      message: e instanceof Error ? e.message : String(e),
+    }
   } finally {
     client.release()
   }

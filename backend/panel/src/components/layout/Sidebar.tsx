@@ -4,24 +4,56 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 const NAV = [
-  { href: "/scan",      label: "Scan",        icon: "▪" },
-  { href: "/pool",      label: "Pool",        icon: "▪" },
-  { href: "/monitor",   label: "Monitor",     icon: "▪" },
-  { href: "/settings",  label: "Settings",    icon: "▪" },
+  { href: "/scan", label: "Scan", icon: "▪" },
+  { href: "/pool", label: "Pool", icon: "▪" },
+  { href: "/settings", label: "Settings", icon: "▪" },
 ]
+
+const LISTINGS_NAV = [
+  { href: "/listings/my-listings", label: "My Listings" },
+  { href: "/listings/import", label: "Import Listings" },
+  { href: "/app/stock-alerts", label: "Stock Alerts" },
+  { href: "/orders", label: "Siparişler" },
+  { href: "/listings/stock-guard-settings", label: "Stock Guard" },
+  { href: "/admin/platform/amazon-worker", label: "Amazon Kaynak Kontrol" },
+  { href: "/admin/users/pending", label: "Pending Users" },
+]
+
+function isListingsActive(path: string): boolean {
+  return (
+    path === "/monitor" ||
+    path.startsWith("/listings/") ||
+    path.startsWith("/monitor/") ||
+    path.startsWith("/admin/")
+  )
+}
 
 export default function Sidebar() {
   const path = usePathname()
+  const listingsOpen = isListingsActive(path)
+
+  const linkStyle = (active: boolean): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "8px 12px",
+    borderRadius: 4,
+    fontSize: 13,
+    fontFamily: "'DM Sans', sans-serif",
+    fontWeight: active ? 500 : 400,
+    letterSpacing: "0.01em",
+    background: active ? "rgba(0,255,136,0.07)" : "transparent",
+    color: active ? "var(--accent)" : "var(--sub)",
+    borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
+    textDecoration: "none",
+    transition: "all 0.15s",
+  })
 
   return (
     <aside
-      className="fixed top-0 left-0 h-screen w-52 flex flex-col z-20"
-      style={{
-        background: "var(--surface)",
-        borderRight: "1px solid var(--border)",
-      }}
+      className="admin-dashboard-sidebar"
+      aria-label="Admin navigation"
     >
-      {/* Logo */}
       <div
         className="flex items-center gap-2 px-5 py-5"
         style={{ borderBottom: "1px solid var(--border)" }}
@@ -40,31 +72,54 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-        {NAV.map(({ href, label, icon }) => {
+        {NAV.slice(0, 2).map(({ href, label, icon }) => {
           const active = path === href || path.startsWith(href + "/")
           return (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm transition-all duration-150"
-              style={{
-                background:    active ? "rgba(0,255,136,0.07)" : "transparent",
-                color:         active ? "var(--accent)"         : "var(--sub)",
-                borderLeft:    active ? "2px solid var(--accent)" : "2px solid transparent",
-                fontFamily:    "'DM Sans', sans-serif",
-                fontWeight:    active ? 500 : 400,
-                letterSpacing: "0.01em",
-              }}
-            >
-              <span
-                className="text-xs"
-                style={{
-                  color:   active ? "var(--accent)" : "var(--dim)",
-                  opacity: active ? 1 : 0.6,
-                }}
-              >
+            <Link key={href} href={href} style={linkStyle(active)}>
+              <span style={{ color: active ? "var(--accent)" : "var(--dim)", opacity: active ? 1 : 0.6, fontSize: 12 }}>
+                {icon}
+              </span>
+              {label}
+            </Link>
+          )
+        })}
+
+        {/* Listings group */}
+        <div style={{ marginTop: 4, marginBottom: 4 }}>
+          <p
+            style={{
+              padding: "8px 12px 4px",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: listingsOpen ? "var(--accent)" : "var(--dim)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            Listings
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 8 }}>
+            {LISTINGS_NAV.map(({ href, label }) => {
+              const active =
+                path === href ||
+                (href === "/listings/my-listings" && path === "/monitor")
+              return (
+                <Link key={href} href={href} style={linkStyle(active)}>
+                  <span style={{ width: 12 }} />
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+
+        {NAV.slice(2).map(({ href, label, icon }) => {
+          const active = path === href || path.startsWith(href + "/")
+          return (
+            <Link key={href} href={href} style={linkStyle(active)}>
+              <span style={{ color: active ? "var(--accent)" : "var(--dim)", opacity: active ? 1 : 0.6, fontSize: 12 }}>
                 {icon}
               </span>
               {label}
@@ -73,11 +128,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div
-        className="px-5 py-4"
-        style={{ borderTop: "1px solid var(--border)" }}
-      >
+      <div className="px-5 py-4" style={{ borderTop: "1px solid var(--border)" }}>
         <p className="text-xs font-mono" style={{ color: "var(--dim)" }}>
           v0.1.0-mvp
         </p>

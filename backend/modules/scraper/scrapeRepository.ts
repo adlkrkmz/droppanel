@@ -77,7 +77,26 @@ export async function upsertAmazonProductCache(
       brand = EXCLUDED.brand,
       price = EXCLUDED.price,
       images = EXCLUDED.images,
-      attributes = EXCLUDED.attributes,
+            -- Simulation fills missing product fields, but must not erase the
+      -- latest extension-selected Prime/stock evidence used by Direct List.
+      attributes = EXCLUDED.attributes || jsonb_strip_nulls(jsonb_build_object(
+        'source', CASE
+          WHEN amazon_product_cache.attributes->>'source' = 'extension'
+          THEN 'extension'
+          ELSE NULL
+        END,
+        'capturedAt', amazon_product_cache.attributes->>'capturedAt',
+        'isPrime', amazon_product_cache.attributes->'isPrime',
+        'primeStatus', amazon_product_cache.attributes->'primeStatus',
+        'primeEvidence', amazon_product_cache.attributes->'primeEvidence',
+        'primeCheckedAt', amazon_product_cache.attributes->>'primeCheckedAt',
+        'selectedAsin', amazon_product_cache.attributes->>'selectedAsin',
+        'pageUrlAsin', amazon_product_cache.attributes->>'pageUrlAsin',
+        'stockStatus', amazon_product_cache.attributes->>'stockStatus',
+        'stockCount', amazon_product_cache.attributes->'stockCount',
+        'stockEvidence', amazon_product_cache.attributes->'stockEvidence',
+        'stockCheckedAt', amazon_product_cache.attributes->>'stockCheckedAt'
+      )),
       updated_at = NOW()
   `
 

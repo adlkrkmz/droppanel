@@ -3,11 +3,12 @@
 // ─────────────────────────────────────────────────────────────
 
 import { query } from "../../db/client"
+import { buildPoolEligibilityWhere } from "../pool/poolEligibilityService"
 import type { PublishQueueEntry } from "./publishQueueTypes"
 
 // ─── PUBLISH SIRADAKİ KAYITLAR ────────────────────────────────
-// status='ready', pipeline_stage='ai_generated',
-// ai_status='success', assigned_store_id = storeId
+// status='ready', pipeline_stage IN (validated, scraped, ai_generated),
+// assigned_store_id = storeId
 
 export async function fetchPublishQueueForStore(
   workspaceId: string,
@@ -38,7 +39,7 @@ export async function fetchPublishQueueForStore(
        AND ap.assigned_store_id = $2
        AND ap.status            = 'ready'
        AND ap.pipeline_stage    IN ('ai_generated', 'validated', 'scraped')
-       AND ap.ai_status         = 'success'
+       AND ${buildPoolEligibilityWhere("ap")}
      ORDER BY ap.priority DESC, ap.id ASC
      LIMIT $3`,
     [workspaceId, storeId, limit]
@@ -71,10 +72,13 @@ export async function findStoreIdByCode(
      FROM stores
      WHERE workspace_id = $1
        AND store_code   = $2
-     LIMIT 1`,
+     ORDER BY id ASC`,
     [workspaceId, storeCode]
   )
 
+  if (result.rows.length > 1) {
+    throw new Error("Ambiguous storeCode; use storeId")
+  }
   const row = result.rows[0]
   if (!row) return null
   return {
@@ -82,6 +86,34 @@ export async function findStoreIdByCode(
     name:      row.name,
     storeCode: row.store_code,
     status:    row.status
+  }
+}
+
+export async function findStoreById(
+  workspaceId: string,
+  storeId:     number
+): Promise<{ id: number; name: string; storeCode: string; status: string } | null> {
+  if (!Number.isInteger(storeId) || storeId < 1) return null
+  const result = await query<{
+    id:         number
+    name:       string
+    store_code: string
+    status:     string
+  }>(
+    `SELECT id, name, store_code, status
+     FROM stores
+     WHERE workspace_id = $1
+       AND id = $2
+     LIMIT 1`,
+    [workspaceId, storeId]
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    id:        row.id,
+    name:      row.name,
+    storeCode: row.store_code,
+    status:    row.status,
   }
 }
 

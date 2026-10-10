@@ -97,6 +97,60 @@ export async function uploadToR2(buffer: Buffer, fileName: string): Promise<stri
 }
 
 /**
+ * Upload an already-fetched buffer to an explicit R2 object key.
+ * Does not resize, crop, or overlay. Used for delivery proofs (`delivery-proofs/`).
+ */
+export async function uploadObjectToR2(
+  buffer: Buffer,
+  objectKey: string,
+  contentType: string
+): Promise<string> {
+  const endpoint = process.env.R2_ENDPOINT
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
+  const bucket = process.env.R2_BUCKET_NAME
+  const publicBase = process.env.R2_PUBLIC_URL
+
+  if (!endpoint?.trim()) throw new Error("R2_ENDPOINT is not set")
+  if (!accessKeyId?.trim() || !secretAccessKey?.trim()) {
+    throw new Error("R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set")
+  }
+  if (!bucket?.trim()) throw new Error("R2_BUCKET_NAME is not set")
+  if (!publicBase?.trim()) throw new Error("R2_PUBLIC_URL is not set")
+
+  const key = objectKey.replace(/^\/+/, "").replace(/\.\./g, "")
+  if (!key.startsWith("delivery-proofs/")) {
+    throw new Error("uploadObjectToR2 refuses keys outside delivery-proofs/")
+  }
+
+  const client = new S3Client({
+    region: "auto",
+    endpoint: endpoint.trim(),
+    credentials: {
+      accessKeyId: accessKeyId.trim(),
+      secretAccessKey: secretAccessKey.trim(),
+    },
+  })
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket.trim(),
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    })
+  )
+
+  let base = publicBase.trim().replace(/\/+$/, "")
+  if (base.startsWith("http://")) {
+    base = `https://${base.slice("http://".length)}`
+  } else if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base}`
+  }
+  return `${base}/${key}`
+}
+
+/**
  * URL'den görsel indirir, buffer döndürür.
  */
 export async function downloadImage(url: string): Promise<Buffer> {
@@ -127,6 +181,18 @@ function createFreeShippingOverlaySvg(): Buffer {
   >FREE SHIPPING</text>
 </svg>
 `.trim()
+  return Buffer.from(svg)
+}
+
+function createShippingBannerSvg(): Buffer {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="110">
+  <rect x="0" y="0" width="2000" height="110" fill="#111827" opacity="0.86"/>
+  <text x="1000" y="70" font-size="50" font-weight="bold" font-family="Arial, sans-serif"
+    fill="white" text-anchor="middle" letter-spacing="0.5">
+    Ships from USA  •  No Import Fees  •  2–3 Day Delivery
+  </text>
+</svg>`.trim()
+
   return Buffer.from(svg)
 }
 
@@ -222,12 +288,28 @@ export async function processAndUploadImages(input: ImageProcessorInput): Promis
     urls.map(async (url, i) => {
       const buffer = await downloadImage(url)
       console.log('[ImageProcessor] downloaded:', url, 'size:', buffer.length, 'bytes')
-      const processed = await sharp(buffer)
-        .resize(2000, 2000, {
-          fit: 'inside',
-          withoutEnlargement: false,
-          kernel: sharp.kernel.lanczos3,
-        })
+      let pipeline = sharp(buffer).resize(2000, 2000, {
+        fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+        withoutEnlargement: false,
+        kernel: sharp.kernel.lanczos3,
+      })
+
+      if (i === 0 && input.warehouseShippingBannerEnabled === true) {
+        const bannerSvg = createShippingBannerSvg()
+        const bannerBuffer = await sharp(bannerSvg).png().toBuffer()
+
+        pipeline = pipeline.composite([
+          {
+            input: bannerBuffer,
+            left: 0,
+            top: 1890,
+            blend: 'over',
+          },
+        ])
+      }
+
+      const processed = await pipeline
         .toFormat('jpeg', {
           quality: 100,
           chromaSubsampling: '4:4:4',

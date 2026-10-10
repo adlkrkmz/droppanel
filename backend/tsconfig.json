@@ -8,5 +8,12 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "outDir": "dist"
-  }
+  },
+  "exclude": [
+    "_archived_scripts",
+    "**/_archived_scripts/**",
+    "panel",
+    "panel/**",
+    "dist"
+  ]
 }

@@ -1,0 +1,248 @@
+{
+  "sourceUrl": "https://www.amazon.com/dp/B003HGGPLW",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "amazon",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "Crayola Washable Markers Broad Line 12 Count",
+    "materials": [
+      "Plastic",
+      "Water-based ink"
+    ],
+    "colors": [
+      "Assorted"
+    ],
+    "price": {
+      "amount": 4.97,
+      "currency": "USD"
+    },
+    "specifications": [
+      "12 count",
+      "Broad tip",
+      "Washable",
+      "Water-based ink",
+      "Ages 3+"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "art_supply",
+    "productType": "markers",
+    "productSubtype": "washable broad tip markers",
+    "isSet": true,
+    "setCount": 12,
+    "selectedVariation": {
+      "displayLabel": "12 Count",
+      "confidence": "high"
+    },
+    "primaryUse": "school coloring and craft projects",
+    "keyPhysicalFeatures": [
+      "12 markers",
+      "washable",
+      "water-based ink",
+      "plastic",
+      "ages 3+",
+      "assorted colors"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "m1",
+      "field": "packageInclusion",
+      "value": "12 piece washable marker set",
+      "scope": "selected_title",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "m2",
+      "field": "tipType",
+      "value": "Broad tip",
+      "scope": "selected_spec",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "m3",
+      "field": "washability",
+      "value": "Washable",
+      "scope": "selected_spec",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "m4",
+      "field": "ageGuidance",
+      "value": "Ages 3+",
+      "scope": "selected_spec",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "m5",
+      "field": "ink",
+      "value": "Water-based ink",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true,
+    "outputReady": true
+  },
+  "generatedContent": {
+    "title": "12 Washable Broad Tip Markers for Kids, Assorted Color Art Supplies for School and Crafts",
+    "description": {
+      "openingParagraph": "🎨 Bring color to everyday creative time with this 12-piece marker set.",
+      "bodyParagraphs": [
+        "Broad tips make it easy to fill pages quickly while the washable formula helps make cleanup easier after creative activities."
+      ],
+      "productDetails": [
+        {
+          "label": "Quantity",
+          "value": "12 count",
+          "evidenceIds": [
+            "m1"
+          ]
+        },
+        {
+          "label": "Tip type",
+          "value": "Broad tip",
+          "evidenceIds": [
+            "m2"
+          ]
+        },
+        {
+          "label": "Colors",
+          "value": "Assorted colors",
+          "evidenceIds": [
+            "m1"
+          ]
+        },
+        {
+          "label": "Washability",
+          "value": "Washable",
+          "evidenceIds": [
+            "m3"
+          ]
+        },
+        {
+          "label": "Age guidance",
+          "value": "Ages 3+",
+          "evidenceIds": [
+            "m4"
+          ]
+        }
+      ],
+      "optionalSections": [
+        {
+          "heading": "Creative Uses",
+          "bullets": [
+            "Great for school projects, sketchbook practice, and colorful rainy-day crafts.",
+            "Pair with poster board or coloring pages for quick creative sessions."
+          ]
+        }
+      ],
+      "careTip": "Recap markers after use so tips stay ready for the next project."
+    },
+    "tags": [
+      "washable marker set",
+      "broad tip markers",
+      "12 piece markers",
+      "kids craft markers",
+      "assorted markers",
+      "school art markers",
+      "coloring marker set",
+      "art supply markers",
+      "creative craft set",
+      "marker gift set",
+      "classroom markers",
+      "drawing marker pack",
+      "everyday craft pens"
+    ],
+    "materials": [
+      {
+        "value": "Plastic",
+        "evidenceIds": [
+          "m5"
+        ]
+      },
+      {
+        "value": "Water-based ink",
+        "evidenceIds": [
+          "m5"
+        ]
+      }
+    ],
+    "categorySuggestion": "Craft Supplies & Tools > Painting & Drawing & Art",
+    "primaryColor": "Multicolor",
+    "secondaryColor": null,
+    "recommendedSellPrice": 12.99,
+    "sourceDescription": "12-count washable broad-tip marker set with assorted water-based colors, plastic marker bodies and a recommended age of 3+.",
+    "sourceSupportedInformation": [
+      "The selected source supports a 12-piece washable broad tip marker set with ages 3+ guidance.",
+      "Washable water-based ink is stated for the selected marker set.",
+      "Plastic marker bodies and assorted colors are supported by the selected product evidence."
+    ],
+    "missingInformation": [
+      "None identified from the available source."
+    ]
+  }
+}

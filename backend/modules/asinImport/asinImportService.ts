@@ -5,16 +5,21 @@
 // Amazon extension, scraper, manual paste — hepsi buradan geçer.
 //
 // Duplicate koruması:
-//   1. Format kontrolü        → invalid
-//   2. Pool'da zaten varsa    → skippedDuplicate
-//   3. Herhangi bir mağazada
-//      LISTED veya ASSIGNED   → skippedStoreConflict
-//   4. Temiz → asin_registry + asin_pool insert
+//   1. Format kontrolü              → invalid
+//   2. Pool'da zaten varsa          → skippedDuplicate / ALREADY_IN_POOL
+//   3. My Listings (store_catalog)  → skippedAlreadyListed
+//   4. Mağazaya atanmış pool kaydı  → skippedStoreConflict
+//   5. Temiz → asin_registry + asin_pool insert
 // ─────────────────────────────────────────────────────────────
 
 import { query } from "../../db/client"
 import { addNotification } from "../notifications/notificationService"
-import type { AsinImportRequest, AsinImportResponse } from "./asinImportTypes"
+import { findExistingListedAsins } from "./listedAsinGuard"
+import type {
+  AsinImportRequest,
+  AsinImportResponse,
+  AsinImportSkipDetail,
+} from "./asinImportTypes"
 
 // ─── ASIN PARSE & VALIDATE ────────────────────────────────────
 
@@ -29,7 +34,6 @@ function parseAndValidate(raw: string[]): {
   const invalid: string[] = []
 
   for (const item of raw) {
-    // Virgül, boşluk, satır sonu ile bölünmüş girdi normalize et
     const parts = item
       .split(/[\s,;]+/)
       .map(p => p.trim().toUpperCase())
@@ -40,7 +44,7 @@ function parseAndValidate(raw: string[]): {
         invalid.push(asin)
         continue
       }
-      if (seen.has(asin)) continue   // input içi duplicate — sessizce atla
+      if (seen.has(asin)) continue
       seen.add(asin)
       valid.push(asin)
     }
@@ -49,7 +53,7 @@ function parseAndValidate(raw: string[]): {
   return { valid, invalid }
 }
 
-// ─── POOL'DA VAR MI? ──────────────────────────────────────────
+// ─── POOL'DA VAR MI? (aktif aday havuzu) ─────────────────────
 
 async function fetchExistingInPool(
   workspaceId: string,
@@ -63,49 +67,71 @@ async function fetchExistingInPool(
      INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
      WHERE ap.workspace_id = $1
        AND ar.asin = ANY($2::text[])
+       AND ap.archived_at IS NULL
        AND ap.status != 'completed'
+       AND ap.pipeline_stage != 'listed'
+       AND ap.listing_status != 'success'
      LIMIT 10000`,
     [workspaceId, asins]
   )
   return new Set(result.rows.map(r => r.asin))
 }
 
-// ─── HERHANGI BİR MAĞAZADA LİSTED/ASSIGNED MI? ───────────────
-// store_catalog_state veya listing_history üzerinden kontrol
+// ─── ARCHIVED POOL REACTIVATE (unique index — yeni satır açılamaz) ─
 
-async function fetchStoreConflicts(
+async function reactivateArchivedPoolItems(
+  workspaceId: string,
+  asins:       string[]
+): Promise<string[]> {
+  if (asins.length === 0) return []
+
+  const result = await query<{ asin: string }>(
+    `UPDATE asin_pool ap
+     SET archived_at       = NULL,
+         archived_by       = NULL,
+         archive_reason    = NULL,
+         status            = 'ready',
+         pipeline_stage    = 'validated',
+         scrape_status     = 'pending',
+         ai_status         = 'pending',
+         listing_status    = 'pending',
+         assigned_store_id = NULL,
+         skip_reason       = NULL,
+         updated_at        = NOW()
+     FROM asin_registry ar
+     WHERE ap.asin_registry_id = ar.id
+       AND ap.workspace_id = $1
+       AND ar.asin = ANY($2::text[])
+       AND ap.archived_at IS NOT NULL
+     RETURNING ar.asin`,
+    [workspaceId, asins]
+  )
+  return result.rows.map(r => r.asin)
+}
+
+// ─── MAĞAZAYA ATANMIŞ POOL (store conflict — mevcut kural) ───
+
+async function fetchAssignedPoolConflicts(
   workspaceId: string,
   asins:       string[]
 ): Promise<Set<string>> {
   if (asins.length === 0) return new Set()
 
-  // listing_history — başarıyla listelenmiş
-  const histResult = await query<{ asin: string }>(
-    `SELECT ar.asin
-     FROM listing_history lh
-     INNER JOIN asin_registry ar ON ar.id = lh.asin_registry_id
-     WHERE lh.workspace_id = $1
-       AND ar.asin = ANY($2::text[])
-     LIMIT 10000`,
-    [workspaceId, asins]
-  )
-
-  // asin_pool — assigned_store_id dolu (mağazaya atanmış ama henüz listed olmayabilir)
-  const assignedResult = await query<{ asin: string }>(
+  const result = await query<{ asin: string }>(
     `SELECT ar.asin
      FROM asin_pool ap
      INNER JOIN asin_registry ar ON ar.id = ap.asin_registry_id
      WHERE ap.workspace_id      = $1
        AND ar.asin              = ANY($2::text[])
        AND ap.assigned_store_id IS NOT NULL
+       AND ap.archived_at IS NULL
+       AND ap.pipeline_stage != 'listed'
+       AND ap.status != 'completed'
+       AND ap.listing_status != 'success'
      LIMIT 10000`,
     [workspaceId, asins]
   )
-
-  const conflicts = new Set<string>()
-  for (const r of histResult.rows)     conflicts.add(r.asin)
-  for (const r of assignedResult.rows) conflicts.add(r.asin)
-  return conflicts
+  return new Set(result.rows.map(r => r.asin))
 }
 
 // ─── REGISTRY'DE VAR MI? ──────────────────────────────────────
@@ -187,6 +213,11 @@ export async function importAsins(
   req:         AsinImportRequest
 ): Promise<AsinImportResponse> {
   const { valid: validAsins, invalid: invalidAsins } = parseAndValidate(req.asins)
+  const skipDetails: AsinImportSkipDetail[] = []
+
+  for (const asin of invalidAsins) {
+    skipDetails.push({ asin, status: "skipped", reason: "INVALID_ASIN" })
+  }
 
   if (validAsins.length === 0) {
     return {
@@ -195,46 +226,57 @@ export async function importAsins(
       inserted:             0,
       skippedDuplicate:     0,
       skippedStoreConflict: 0,
+      skippedAlreadyListed: 0,
       invalid:              invalidAsins.length,
       invalidAsins,
       duplicateAsins:       [],
       conflictAsins:        [],
+      alreadyListedAsins:   [],
       insertedAsins:        [],
+      skipDetails,
     }
   }
 
-  // Paralel kontroller
-  const [poolSet, conflictSet] = await Promise.all([
+  const [poolSet, listedMap, assignedSet] = await Promise.all([
     fetchExistingInPool(workspaceId, validAsins),
-    fetchStoreConflicts(workspaceId, validAsins),
+    findExistingListedAsins(workspaceId, validAsins),
+    fetchAssignedPoolConflicts(workspaceId, validAsins),
   ])
 
-  const duplicateAsins: string[] = []
-  const conflictAsins:  string[] = []
-  const toInsert:       string[] = []
+  const duplicateAsins:     string[] = []
+  const alreadyListedAsins: string[] = []
+  const conflictAsins:      string[] = []
+  const toInsert:           string[] = []
 
   for (const asin of validAsins) {
     if (poolSet.has(asin)) {
       duplicateAsins.push(asin)
-    } else if (conflictSet.has(asin)) {
+      skipDetails.push({ asin, status: "skipped", reason: "ALREADY_IN_POOL" })
+    } else if (listedMap.has(asin)) {
+      const match = listedMap.get(asin)!
+      alreadyListedAsins.push(asin)
+      skipDetails.push({
+        asin,
+        status: "skipped",
+        reason: "ALREADY_LISTED_IN_STORE",
+        storeCode: match.storeCode,
+        ebayItemId: match.ebayItemId,
+        catalogStateId: match.catalogStateId,
+      })
+    } else if (assignedSet.has(asin)) {
       conflictAsins.push(asin)
+      skipDetails.push({ asin, status: "skipped", reason: "STORE_CONFLICT" })
     } else {
       toInsert.push(asin)
     }
   }
 
-  // Insert (bulk)
   await insertRegistryBulk(workspaceId, toInsert)
   const registryMap = await fetchExistingRegistry(workspaceId, toInsert)
 
-  // TO-DO: insertRegistryBulk RETURNING only yeni eklenenleri getirir.
-  // Bu yüzden pool insert öncesi kesin olarak toInsert'in tamamı için registry id'lerini çekiyoruz.
   const missing = toInsert.filter(asin => !registryMap.has(asin))
   if (missing.length > 0) {
-    console.warn(
-      "[Import] Could not find registry ids for:",
-      missing.slice(0, 5)
-    )
+    console.warn("[Import] Could not find registry ids for:", missing.slice(0, 5))
   }
 
   const registryRows = toInsert
@@ -242,21 +284,33 @@ export async function importAsins(
     .map((asin) => ({ asin, id: registryMap.get(asin)! }))
   const insertedAsins = await insertPoolBulk(workspaceId, registryRows)
   const insertedSet = new Set(insertedAsins)
-  for (const asin of toInsert) {
-    if (!insertedSet.has(asin)) duplicateAsins.push(asin)
+  const notInserted = toInsert.filter(asin => !insertedSet.has(asin))
+  const reactivatedAsins = notInserted.length > 0
+    ? await reactivateArchivedPoolItems(workspaceId, notInserted)
+    : []
+  const reactivatedSet = new Set(reactivatedAsins)
+  const finalInsertedAsins = [...insertedAsins, ...reactivatedAsins]
+
+  for (const asin of notInserted) {
+    if (reactivatedSet.has(asin)) continue
+    duplicateAsins.push(asin)
+    skipDetails.push({ asin, status: "skipped", reason: "ALREADY_IN_POOL" })
   }
 
-  const response = {
+  const response: AsinImportResponse = {
     totalInput:           req.asins.length,
     valid:                validAsins.length,
-    inserted:             insertedAsins.length,
+    inserted:             finalInsertedAsins.length,
     skippedDuplicate:     duplicateAsins.length,
     skippedStoreConflict: conflictAsins.length,
+    skippedAlreadyListed: alreadyListedAsins.length,
     invalid:              invalidAsins.length,
     invalidAsins,
     duplicateAsins,
     conflictAsins,
-    insertedAsins,
+    alreadyListedAsins,
+    insertedAsins:        finalInsertedAsins,
+    skipDetails,
   }
   try {
     await addNotification(

@@ -5,12 +5,17 @@ import { useState, useEffect, useRef, useCallback, type CSSProperties } from "re
 import { getStores, getNotifications, markNotificationsRead, markAllNotificationsRead } from "@/lib/api"
 import type { StoreRow, PersistedNotificationRow } from "@/lib/api"
 import { useStore } from "@/lib/storeContext"
+import { scrubTechnicalReasonInText } from "@/lib/sourceStatusDisplay"
 
 const TITLES: Record<string, { label: string; desc: string }> = {
-  "/scan":      { label: "Scan",        desc: "Amazon search scan & ASIN discovery"      },
-  "/pool":      { label: "Pool",        desc: "ASIN pool — view, filter & dispatch"      },
-  "/monitor":   { label: "Monitor",     desc: "Live eBay listings — track margin & stock" },
-  "/settings":  { label: "Settings",    desc: "Store settings & eBay configuration"      },
+  "/scan":                    { label: "Scan",             desc: "Amazon search scan & ASIN discovery"           },
+  "/pool":                    { label: "Pool",             desc: "ASIN pool — view, filter & dispatch"           },
+  "/listings/my-listings":    { label: "Listings",         desc: "Manage eBay listings and source status"        },
+  "/listings/import":         { label: "Import Listings",  desc: "Match eBay IDs with Amazon ASINs"              },
+  "/listings/stock-alerts":   { label: "Stock Alerts",     desc: "Review risky source status and approve actions" },
+  "/listings/stock-guard-settings": { label: "Stock Guard", desc: "Automatic source scan and approval mode" },
+  "/monitor":                 { label: "Listings",         desc: "Manage eBay listings and source status"        },
+  "/settings":                { label: "Settings",         desc: "Store settings & eBay configuration"           },
 }
 
 function LiveClock() {
@@ -73,7 +78,11 @@ function typeColor(t: string): string {
 export default function Topbar() {
   const path = usePathname()
   const router = useRouter()
-  const page = TITLES[path] ?? { label: "Panel", desc: "" }
+  const page =
+    TITLES[path] ??
+    (path.startsWith("/listings/")
+      ? TITLES["/listings/my-listings"]
+      : { label: "Panel", desc: "" })
   const { selectedStore, setSelectedStore } = useStore()
   const [stores, setStores] = useState<StoreRow[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
@@ -123,7 +132,8 @@ export default function Topbar() {
   const activeStores = stores.filter((s) => s.status === "active")
   const storeOptions = activeStores.length > 0 ? activeStores : stores
   const selectedOption = storeOptions.find((s) => s.storeCode === selectedStore)
-  const selectedLabel = selectedOption?.name?.trim() || "Store"
+  const selectedLabel = selectedOption?.name?.trim()
+    || (stores.length === 0 ? "Loading…" : selectedStore || "Select store")
 
   const unreadCount = persisted.filter((n) => !n.read).length
 
@@ -134,6 +144,11 @@ export default function Topbar() {
     } catch {
       /* */
     }
+  }
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" })
+    window.location.href = "/login"
   }
 
   const onRowClick = async (row: PersistedNotificationRow) => {
@@ -150,13 +165,7 @@ export default function Topbar() {
 
   return (
     <header
-      className="fixed top-0 right-0 z-10 flex items-center justify-between px-6 py-0"
-      style={{
-        left:         "208px",
-        height:       "56px",
-        background:   "var(--bg)",
-        borderBottom: "1px solid var(--border)",
-      }}
+      className="admin-dashboard-topbar"
     >
       <div className="flex items-baseline gap-3">
         <h1
@@ -185,6 +194,23 @@ export default function Topbar() {
         </button>
         <LiveClock />
         <LiveDot />
+
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          style={{
+            fontSize: "11px",
+            fontFamily: "'JetBrains Mono', monospace",
+            color: "var(--dim)",
+            background: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: "3px",
+            padding: "4px 10px",
+            cursor: "pointer",
+          }}
+        >
+          Çıkış
+        </button>
 
         <div ref={notifWrapRef} style={{ position: "relative" }}>
           <button
@@ -354,7 +380,7 @@ export default function Topbar() {
                             fontFamily: "'JetBrains Mono', monospace",
                           }}
                         >
-                          {n.message}
+                          {scrubTechnicalReasonInText(n.message)}
                         </div>
                       ) : null}
                       <div style={{ fontSize: 9, color: "var(--dim)", marginTop: 6 }}>

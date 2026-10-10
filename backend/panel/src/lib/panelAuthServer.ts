@@ -1,0 +1,39 @@
+import { NextRequest, NextResponse } from "next/server"
+
+export const USER_SESSION_COOKIE = "listjetgo_session"
+
+export function panelApiBase(): string {
+  return (
+    process.env.BACKEND_API_BASE?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE?.trim() ||
+    "http://localhost:4000"
+  ).replace(/\/$/, "")
+}
+
+export function cookieSecure(): boolean {
+  return process.env.NODE_ENV === "production" && process.env.ADMIN_COOKIE_SECURE === "true"
+}
+
+export function clearAuthCookies(response: NextResponse): void {
+  response.cookies.set("admin_session", "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieSecure(),
+    path: "/",
+    maxAge: 0,
+  })
+  response.cookies.set(USER_SESSION_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieSecure(),
+    path: "/",
+    maxAge: 0,
+  })
+}
+
+export function hasPanelSession(request: NextRequest): boolean {
+  return !!(
+    request.cookies.get("admin_session")?.value ||
+    request.cookies.get(USER_SESSION_COOKIE)?.value
+  )
+}

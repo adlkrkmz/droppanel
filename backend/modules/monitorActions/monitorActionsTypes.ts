@@ -28,6 +28,7 @@ export type UpdateStockResponse = {
   sku:        string
   quantity:   number
   message:    string
+  updatedDb:  boolean
 }
 
 export type BlindRequest = {
@@ -40,4 +41,5 @@ export type BlindResponse = {
   simulation: boolean
   sku:        string
   message:    string
+  updatedDb:  boolean
 }

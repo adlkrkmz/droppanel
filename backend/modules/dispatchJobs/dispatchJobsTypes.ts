@@ -25,6 +25,8 @@ export type DispatchFailedStage =
   | "claim"
   | "unknown"
 
+export type DispatchTitleMode = "titlebot" | "ai"
+
 export type DispatchRun = {
   id: number
   workspaceId: string
@@ -40,6 +42,10 @@ export type DispatchRun = {
   startedAt: string | null
   completedAt: string | null
   updatedAt: string
+  /** In-memory run setting (not persisted); default titlebot */
+  titleMode?: DispatchTitleMode
+  poolSkipped?:     number
+  poolSkipDetails?: Array<{ poolId: number; asin?: string | null; reason: string }>
 }
 
 export type DispatchJobType =
@@ -70,6 +76,9 @@ export type DispatchJob = {
   nextRetryAt: string | null
   createdAt: string
   updatedAt: string
+  /** From parent dispatch run; titlebot = skip AI generate in worker */
+  titleMode?: DispatchTitleMode
+  skipAi?: boolean
 }
 
 export type ClaimNextJobResult = {
@@ -82,6 +91,7 @@ export type CreateRunRequest = {
   quantity: number
   delaySeconds: number
   poolIds: number[]
+  titleMode?: DispatchTitleMode
 }
 
 /** Worker → backend: 60s job timeout gibi sınıflandırma (mesaj dışı). */

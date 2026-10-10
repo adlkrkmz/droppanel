@@ -6,6 +6,7 @@
 import { getValidAccessToken } from "../ebayOAuth/ebayOAuthService"
 import type { EbayMerchantLocationAddress } from "../ebay/ebayApiClient"
 import { EbayApiClient } from "../ebay/ebayApiClient"
+import { ensureWarehouseMerchantLocationOnEbay } from "../ebay/ebayLocationService"
 import { findStoreIdByCode } from "../publishQueue/publishQueueRepository"
 import {
   createSettings,
@@ -13,6 +14,8 @@ import {
   updateSettings,
 } from "../storeSettings/storeSettingsRepository"
 import type { StoreAddress, StoreSettingsRow } from "../storeSettings/storeSettingsTypes"
+import type { PricingMode, TieredProfitOverrides } from "../pricing/pricingTypes"
+import { normalizeTieredProfitOverrides } from "../pricing/pricingService"
 import { query } from "../../db/client"
 
 const EBAY_FULFILLMENT =
@@ -37,6 +40,9 @@ export type SettingsForStoreResponse = {
   storeCode:             string
   storeName:             string
   markupPercent:         number
+  pricingMode:           PricingMode
+  percentageNetProfitPercent: number
+  tieredProfitOverrides: TieredProfitOverrides
   countryOrRegion:       string | null
   cityState:             string | null
   address:               StoreAddress | null
@@ -45,6 +51,7 @@ export type SettingsForStoreResponse = {
   fulfillmentPolicyId:   string | null
   paymentPolicyId:       string | null
   returnPolicyId:        string | null
+  warehouseShippingBannerEnabled: boolean
 }
 
 function rowToAddress(row: StoreSettingsRow): StoreAddress | null {
@@ -78,6 +85,9 @@ function rowToSettingsResponse(
     storeCode:           store.storeCode,
     storeName:           store.name,
     markupPercent:       row?.markupPercent ?? 35,
+    pricingMode:         row?.pricingMode ?? "PERCENTAGE_NET_PROFIT",
+    percentageNetProfitPercent: row?.percentageNetProfitPercent ?? row?.markupPercent ?? 35,
+    tieredProfitOverrides: row?.tieredProfitOverrides ?? [],
     countryOrRegion:     row?.addressCountry?.trim() ?? null,
     cityState,
     address:             row ? rowToAddress(row) : null,
@@ -86,6 +96,7 @@ function rowToSettingsResponse(
     fulfillmentPolicyId: row?.fulfillmentPolicyId ?? null,
     paymentPolicyId:     row?.paymentPolicyId     ?? null,
     returnPolicyId:      row?.returnPolicyId      ?? null,
+    warehouseShippingBannerEnabled: row?.warehouseShippingBannerEnabled === true,
   }
 }
 
@@ -107,6 +118,7 @@ export async function saveMarkup(
   await query(
     `UPDATE store_settings
      SET markup_percent = $3,
+         percentage_net_profit_percent = $3,
          updated_at = NOW()
      WHERE workspace_id = $1
        AND store_id = (
@@ -118,6 +130,65 @@ export async function saveMarkup(
        )`,
     [workspaceId, storeCode, markupPercent]
   )
+}
+
+export async function savePricing(
+  workspaceId: string,
+  storeCode: string,
+  input: {
+    pricingMode: PricingMode
+    percentageNetProfitPercent: number
+    tieredProfitOverrides: TieredProfitOverrides
+  }
+): Promise<SettingsForStoreResponse> {
+  const store = await findStoreIdByCode(workspaceId, storeCode)
+  if (!store) throw new Error("Store not found")
+
+  const overrides = normalizeTieredProfitOverrides(input.tieredProfitOverrides)
+  const existing = await getSettingsByStore(workspaceId, store.id)
+  if (existing) {
+    await updateSettings(workspaceId, store.id, {
+      enabled: true,
+      pricingMode: input.pricingMode,
+      percentageNetProfitPercent: input.percentageNetProfitPercent,
+      tieredProfitOverrides: overrides,
+    })
+  } else {
+    await createSettings({
+      workspaceId,
+      storeId: store.id,
+      enabled: true,
+      pricingMode: input.pricingMode,
+      percentageNetProfitPercent: input.percentageNetProfitPercent,
+      tieredProfitOverrides: overrides,
+    })
+  }
+
+  const saved = await getSettingsForStore(workspaceId, storeCode)
+  if (!saved) throw new Error("Store settings could not be loaded after save")
+  return saved
+}
+
+export async function saveWarehouseBanner(
+  workspaceId: string,
+  storeCode: string,
+  enabled: boolean
+): Promise<void> {
+  const store = await findStoreIdByCode(workspaceId, storeCode)
+  if (!store) throw new Error("Store not found")
+
+  const row = await getSettingsByStore(workspaceId, store.id)
+  if (!row) {
+    await createSettings({
+      workspaceId,
+      storeId: store.id,
+      warehouseShippingBannerEnabled: enabled,
+    })
+    return
+  }
+  await updateSettings(workspaceId, store.id, {
+    warehouseShippingBannerEnabled: enabled,
+  })
 }
 
 /** eBay inventory location key: warehouse-{storeCode}, max 36 chars */
@@ -211,15 +282,8 @@ export async function syncWarehouseMerchantLocationToEbay(
       sandbox,
       simulationMode: false,
     })
-    const key  = warehouseMerchantLocationKey(storeCode)
     const ebayAddr = storeAddressToEbayLocation(address)
-    const res = await client.getMerchantLocation(key)
-    if (res.kind === "not_found") {
-      await client.createMerchantLocation(key, ebayAddr)
-      console.log(`[Settings] eBay merchant location created: ${key}`)
-    } else if (res.kind === "error") {
-      console.warn(`[Settings] getMerchantLocation(${key}): ${res.message}`)
-    }
+    await ensureWarehouseMerchantLocationOnEbay(client, storeCode, ebayAddr, { strict: false })
   } catch (e) {
     console.warn(
       `[Settings] syncWarehouseMerchantLocationToEbay: ${e instanceof Error ? e.message : String(e)}`

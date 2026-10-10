@@ -1,0 +1,166 @@
+{
+  "sourceUrl": "https://supplier.example/candles/soy-1",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "supplier_site",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "Soy Wax Lavender Scented Candle 8oz",
+    "materials": [
+      "Soy wax"
+    ],
+    "colors": [
+      "Cream"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "candle",
+    "productType": "scented candle",
+    "isSet": false,
+    "selectedVariation": {
+      "displayLabel": "Lavender / 8oz",
+      "confidence": "high"
+    },
+    "keyPhysicalFeatures": [
+      "soy wax",
+      "lavender scent",
+      "8oz"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "c1",
+      "field": "baseMetal",
+      "value": "Soy wax",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "outputReady": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true
+  },
+  "generatedContent": {
+    "title": "Lavender Soy Wax Scented Candle, 8oz Jar",
+    "description": {
+      "openingParagraph": "🕯️ This lavender soy wax scented candle brings a soft fragrance accent to quiet corners of the home.",
+      "bodyParagraphs": [
+        "The 8oz jar size suits desks, bedside tables, and small living spaces."
+      ],
+      "productDetails": [
+        {
+          "label": "Wax",
+          "value": "Soy wax",
+          "evidenceIds": [
+            "c1"
+          ]
+        },
+        {
+          "label": "Scent",
+          "value": "Lavender"
+        },
+        {
+          "label": "Size",
+          "value": "8oz"
+        }
+      ],
+      "careTip": "Trim the wick before each burn and never leave a candle unattended.",
+      "optionalSections": [
+        {
+          "heading": "Scent & Atmosphere",
+          "bullets": [
+            "A calm lavender note suited to evenings, reading corners, and wind-down routines."
+          ]
+        }
+      ]
+    },
+    "tags": [
+      "lavender soy candle",
+      "soy wax candle",
+      "scented jar candle",
+      "lavender candle",
+      "8oz soy candle",
+      "home scent candle",
+      "quiet home candle",
+      "soy jar candle",
+      "gift soy candle",
+      "lavender home scent",
+      "small soy candle",
+      "desk candle gift",
+      "soft scent candle"
+    ],
+    "materials": [
+      {
+        "value": "Soy wax",
+        "evidenceIds": [
+          "c1"
+        ]
+      }
+    ],
+    "categorySuggestion": "Home & Living > Home Fragrance > Candles",
+    "primaryColor": "Cream",
+    "sourceSupportedInformation": [
+      "The selected source supports a lavender soy wax candle in an 8oz size."
+    ],
+    "missingInformation": [
+      "None identified from the available source."
+    ]
+  }
+}

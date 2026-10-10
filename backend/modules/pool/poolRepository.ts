@@ -140,8 +140,13 @@ export async function assignPoolEntryToStore(id: number, storeId: number | null)
 
 export async function deleteAsinPoolEntry(id: number) {
   const sql = `
-    DELETE FROM asin_pool
-    WHERE id = $1
+    UPDATE asin_pool
+    SET archived_at    = NOW(),
+        archived_by    = 'legacy_delete_api',
+        archive_reason = 'LEGACY_SOFT_ARCHIVE',
+        status         = 'skipped',
+        updated_at     = NOW()
+    WHERE id = $1 AND archived_at IS NULL
     RETURNING id
   `
 

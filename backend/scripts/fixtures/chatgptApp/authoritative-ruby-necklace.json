@@ -1,0 +1,223 @@
+{
+  "sourceUrl": "https://www.amazon.com/dp/B0FNRBB1QZ",
+  "sourceReadMode": "chatgpt_direct",
+  "sourceType": "amazon",
+  "sourceStatus": "ok",
+  "sourceEvidence": {
+    "title": "1.2CT Rose Heart Necklace with Lab-Grown Ruby, S925 Sterling Silver",
+    "selectedOption": "01/07 - Ruby",
+    "materials": [
+      "Lab-Grown Ruby",
+      "S925 Sterling Silver",
+      "18K white gold plating"
+    ],
+    "colors": [
+      "Red",
+      "Silver"
+    ],
+    "specifications": [
+      "Lab-grown ruby",
+      "Heart shape",
+      "Lobster clasp",
+      "Not hypoallergenic"
+    ]
+  },
+  "productUnderstanding": {
+    "productFamily": "jewelry",
+    "productType": "pendant necklace",
+    "isSet": false,
+    "selectedVariation": {
+      "rawLabel": "01/07 - Ruby",
+      "displayLabel": "Ruby / Silver",
+      "confidence": "high"
+    },
+    "keyPhysicalFeatures": [
+      "rose heart pendant",
+      "lab-grown ruby",
+      "925 sterling silver"
+    ]
+  },
+  "evidenceItems": [
+    {
+      "id": "n1",
+      "field": "stoneCreation",
+      "value": "lab-grown ruby",
+      "scope": "selected_spec",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "n2",
+      "field": "baseMetal",
+      "value": "925 sterling silver",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    },
+    {
+      "id": "n3",
+      "field": "plating",
+      "value": "18K white gold plating",
+      "scope": "materials",
+      "selectedProductSpecific": true,
+      "confidence": "high"
+    }
+  ],
+  "selfAudit": {
+    "productTypeIdentified": true,
+    "selectedVariationOnly": true,
+    "setCountVerifiedOrOmitted": true,
+    "titleMatchesProductType": true,
+    "titleIsReadable": true,
+    "titleAvoidsKeywordStuffing": true,
+    "titleWithinCharacterLimit": true,
+    "descriptionMatchesProductType": true,
+    "descriptionIsWarmAndHuman": true,
+    "descriptionIsSalesFocusedWithoutHype": true,
+    "descriptionAvoidsUnnecessaryInformation": true,
+    "descriptionUsesControlledEmoji": true,
+    "productDetailsAreRelevant": true,
+    "productDetailsAvoidInternalMetadata": true,
+    "tagsMatchProductType": true,
+    "tagsAreSearchNatural": true,
+    "tagsAvoidExcessiveRepetition": true,
+    "materialsDoNotConflict": true,
+    "categoryMatchesProductType": true,
+    "colorsMatchSelectedVariation": true,
+    "noUnsupportedClaims": true,
+    "noOtherVariationClaims": true,
+    "noMarketplaceMetrics": true,
+    "noInternalDebugText": true,
+    "missingInformationIsRelevant": true,
+    "sourceSupportedSummaryIsConcise": true,
+    "outputReady": true,
+    "customerFacingContentOnly": true,
+    "descriptionHasCompleteOpeningSentence": true,
+    "descriptionAvoidsPolicyNarration": true,
+    "descriptionAvoidsGenericDisclaimers": true,
+    "productDetailsAreBuyerRelevant": true,
+    "productDetailsAvoidPackageMetadata": true,
+    "optionalSectionHeadingMatchesProduct": true,
+    "pleaseNotesAreMateriallyRelevant": true,
+    "missingInformationIsPurchaseRelevant": true,
+    "missingInformationAvoidsDeliverySpeculation": true,
+    "technicalClaimsHaveEvidence": true,
+    "sourceSupportedClaimsHaveEvidence": true,
+    "brandFreeCustomerContent": true,
+    "protectedNameFreeCustomerContent": true,
+    "brandObfuscationUsed": false,
+    "selectedProductAccurate": true,
+    "noParentOptionLeakage": true,
+    "noFakeVariation": true,
+    "titleNaturalAndConcise": true,
+    "descriptionBuyerFocused": true,
+    "optionalSectionsJustified": true,
+    "buyerUsefulDetailsOnly": true,
+    "tagsRepresentDistinctBuyerIntents": true,
+    "noExcessiveKeywordRepetition": true,
+    "materialsAreActualMaterials": true,
+    "colorsAreNonRedundant": true,
+    "noMissingImageReference": true,
+    "noSourceProcessNarration": true,
+    "availableShopDefaultsApplied": true,
+    "unresolvedPriceNotRepresentedAsZero": true,
+    "reviewOnlyContentIsolated": true,
+    "policyReviewComplete": true
+  },
+  "generatedContent": {
+    "title": "Ruby Rose Heart Necklace, 925 Sterling Silver Pendant with I Love You Engraving",
+    "description": {
+      "openingParagraph": "✨ This ruby rose heart necklace features a 925 sterling silver pendant with an engraved I Love You message and a rich red center stone.",
+      "bodyParagraphs": [
+        "The rose-and-heart design gives the necklace a romantic, sentimental character while remaining delicate enough for everyday wear."
+      ],
+      "productDetails": [
+        {
+          "label": "Selected style",
+          "value": "Ruby / Silver"
+        },
+        {
+          "label": "Stone",
+          "value": "Lab-grown ruby",
+          "evidenceIds": [
+            "n1"
+          ]
+        },
+        {
+          "label": "Metal",
+          "value": "925 sterling silver",
+          "evidenceIds": [
+            "n2"
+          ]
+        },
+        {
+          "label": "Plating",
+          "value": "18K white gold plating",
+          "evidenceIds": [
+            "n3"
+          ]
+        },
+        {
+          "label": "Closure",
+          "value": "Lobster clasp"
+        }
+      ],
+      "careTip": "Store in a dry place and wipe gently with a soft cloth after wear.",
+      "pleaseNotes": [
+        "The source states that this necklace is not hypoallergenic."
+      ],
+      "optionalSections": [
+        {
+          "heading": "Gift & Styling Ideas",
+          "bullets": [
+            "A thoughtful choice for an anniversary, birthday, or a simple sentimental gift."
+          ]
+        }
+      ]
+    },
+    "tags": [
+      "ruby rose necklace",
+      "ruby pendant",
+      "ruby heart necklace",
+      "heart pendant",
+      "rose heart pendant",
+      "lab grown ruby",
+      "sterling silver",
+      "i love you necklace",
+      "romantic jewelry",
+      "sentimental necklace",
+      "gift for wife",
+      "anniversary gift",
+      "birthday gift"
+    ],
+    "materials": [
+      {
+        "value": "lab-grown ruby",
+        "evidenceIds": [
+          "n1"
+        ]
+      },
+      {
+        "value": "925 sterling silver",
+        "evidenceIds": [
+          "n2"
+        ]
+      },
+      {
+        "value": "18K white gold plating",
+        "evidenceIds": [
+          "n3"
+        ]
+      }
+    ],
+    "categorySuggestion": "Jewelry & Accessories > Necklaces > Pendant Necklaces",
+    "primaryColor": "Red",
+    "secondaryColor": "Silver",
+    "sourceSupportedInformation": [
+      "The selected source product supports the Ruby / Silver style, a lab-grown ruby center stone, and 925 sterling silver with white gold plating."
+    ],
+    "missingInformation": [
+      "Exact chain length was not verified from the source."
+    ]
+  }
+}

@@ -1,0 +1,583 @@
+/* ListJetGo homepage — isolated from dashboard panel styles */
+
+.lj-home {
+  --lj-bg: #09090b;
+  --lj-surface: #111318;
+  --lj-surface-2: #161a22;
+  --lj-border: #232833;
+  --lj-text: #e8eaef;
+  --lj-muted: #8b92a3;
+  --lj-dim: #5c6478;
+  --lj-accent: #5b8def;
+  --lj-accent-soft: rgba(91, 141, 239, 0.12);
+  --lj-success: #34c759;
+  --lj-max: 1180px;
+  /* Set from JS: GRID_PULSE_OPACITY_MAX — never hardcode 0.18 here */
+  --lj-grid-pulse-max: 0.18;
+  position: relative;
+  width: 100%;
+  color: var(--lj-text);
+  font-family: 'DM Sans', sans-serif;
+}
+
+.lj-home a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* —— Nav —— */
+.lj-nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  border-bottom: 1px solid var(--lj-border);
+  background: rgba(9, 9, 11, 0.88);
+  backdrop-filter: blur(14px);
+}
+
+.lj-nav-inner {
+  max-width: var(--lj-max);
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lj-brand {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+  color: var(--lj-text);
+}
+
+.lj-nav-links {
+  display: none;
+  align-items: center;
+  gap: 24px;
+  font-size: 0.875rem;
+  color: var(--lj-muted);
+}
+
+.lj-nav-links a:hover {
+  color: var(--lj-text);
+}
+
+.lj-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--lj-accent);
+  color: #0b0d12;
+  border: none;
+  cursor: pointer;
+}
+
+.lj-nav-cta:hover {
+  opacity: 0.92;
+}
+
+.lj-menu-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lj-menu-btn span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--lj-text);
+  border-radius: 1px;
+}
+
+.lj-mobile-menu {
+  display: none;
+  flex-direction: column;
+  padding: 0 20px 16px;
+  border-top: 1px solid var(--lj-border);
+}
+
+.lj-mobile-menu--open {
+  display: flex;
+}
+
+.lj-mobile-menu a {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  font-size: 0.95rem;
+  color: var(--lj-muted);
+  border-bottom: 1px solid var(--lj-border);
+}
+
+@media (min-width: 768px) {
+  .lj-nav-links {
+    display: flex;
+  }
+  .lj-menu-btn {
+    display: none;
+  }
+  .lj-mobile-menu {
+    display: none !important;
+  }
+}
+
+/* —— Hero shell —— */
+.lj-hero-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.lj-hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: var(--lj-max);
+  margin: 0 auto;
+  padding: 48px 20px 32px;
+}
+
+.lj-demo-label {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lj-dim);
+  margin-bottom: 16px;
+}
+
+.lj-hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(1.85rem, 5vw, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--lj-text);
+  max-width: 16ch;
+}
+
+.lj-hero-lead {
+  margin-top: 16px;
+  font-size: clamp(1rem, 2.2vw, 1.15rem);
+  line-height: 1.55;
+  color: var(--lj-muted);
+  max-width: 52ch;
+}
+
+.lj-hero-ctas {
+  margin-top: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lj-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+
+.lj-btn--primary {
+  background: var(--lj-accent);
+  color: #0b0d12;
+}
+
+.lj-btn--ghost {
+  background: transparent;
+  color: var(--lj-text);
+  border: 1px solid var(--lj-border);
+}
+
+.lj-btn--ghost:hover {
+  border-color: #3a4254;
+}
+
+/* —— Market pulse grid —— */
+.lj-pulse-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.lj-pulse-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  gap: 1px;
+  padding: 12px;
+}
+
+.lj-pulse-cell {
+  border-radius: 2px;
+  background: var(--lj-accent);
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+.lj-pulse-cell--active {
+  transition: opacity 0.8s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lj-pulse-cell {
+    transition: none;
+  }
+}
+
+/* —— ASIN strip —— */
+.lj-asin-section {
+  position: relative;
+  z-index: 2;
+  max-width: var(--lj-max);
+  margin: 0 auto;
+  padding: 8px 20px 24px;
+}
+
+.lj-asin-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lj-dim);
+  margin-bottom: 8px;
+}
+
+.lj-asin-track-wrap {
+  overflow: hidden;
+  border: 1px solid var(--lj-border);
+  border-radius: 8px;
+  background: rgba(17, 19, 24, 0.7);
+}
+
+.lj-asin-track {
+  display: flex;
+  gap: 24px;
+  padding: 12px 16px;
+  width: max-content;
+  animation: lj-asin-scroll 42s linear infinite;
+}
+
+.lj-asin-track-wrap:hover .lj-asin-track {
+  animation-play-state: paused;
+}
+
+.lj-asin-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--lj-muted);
+}
+
+.lj-asin-asin {
+  color: var(--lj-dim);
+}
+
+.lj-asin-signal {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+@keyframes lj-asin-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lj-asin-track {
+    animation: none;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+}
+
+/* —— Scanner —— */
+.lj-scanner-section {
+  position: relative;
+  z-index: 2;
+  max-width: var(--lj-max);
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  scroll-margin-top: 72px;
+}
+
+.lj-scanner-card {
+  border: 1px solid var(--lj-border);
+  border-radius: 12px;
+  background: var(--lj-surface);
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.lj-scanner-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--lj-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lj-scanner-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lj-muted);
+}
+
+.lj-scanner-body {
+  display: grid;
+  gap: 0;
+}
+
+@media (min-width: 900px) {
+  .lj-scanner-body {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.lj-scanner-input-col {
+  padding: 20px;
+  border-bottom: 1px solid var(--lj-border);
+}
+
+@media (min-width: 900px) {
+  .lj-scanner-input-col {
+    border-bottom: none;
+    border-right: 1px solid var(--lj-border);
+  }
+}
+
+.lj-scanner-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lj-scanner-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--lj-border);
+  background: var(--lj-surface-2);
+  color: var(--lj-text);
+  font-size: 1rem;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.lj-scanner-input:focus {
+  outline: none;
+  border-color: var(--lj-accent);
+  box-shadow: 0 0 0 1px var(--lj-accent-soft);
+}
+
+.lj-scanner-run {
+  min-height: 48px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.lj-scanner-run--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.lj-scanner-lines {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+
+.lj-scanner-line {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--lj-dim);
+  opacity: 0.35;
+  transition: opacity 0.25s, color 0.25s;
+}
+
+.lj-scanner-line--active {
+  opacity: 1;
+  color: var(--lj-muted);
+}
+
+.lj-scanner-line--done {
+  opacity: 0.7;
+  color: var(--lj-dim);
+}
+
+.lj-scanner-progress {
+  margin-top: 12px;
+  height: 2px;
+  background: var(--lj-border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.lj-scanner-progress-bar {
+  height: 100%;
+  background: var(--lj-accent);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.lj-scanner-results-col {
+  padding: 20px;
+  background: var(--lj-surface-2);
+  min-height: 280px;
+}
+
+.lj-scanner-results-empty {
+  font-size: 0.85rem;
+  color: var(--lj-dim);
+  padding: 24px 0;
+}
+
+.lj-scanner-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.lj-metric {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--lj-border);
+  background: var(--lj-surface);
+}
+
+.lj-metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lj-dim);
+}
+
+.lj-metric-value {
+  margin-top: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--lj-text);
+}
+
+.lj-scanner-rec {
+  margin-top: 16px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--lj-muted);
+}
+
+.lj-scanner-cta {
+  margin-top: 20px;
+  width: 100%;
+}
+
+/* —— Product modules —— */
+.lj-modules {
+  max-width: var(--lj-max);
+  margin: 0 auto;
+  padding: 0 20px 64px;
+}
+
+.lj-modules h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--lj-text);
+  margin-bottom: 8px;
+}
+
+.lj-modules-sub {
+  font-size: 0.9rem;
+  color: var(--lj-muted);
+  margin-bottom: 24px;
+}
+
+.lj-modules-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .lj-modules-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .lj-modules-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.lj-module-card {
+  padding: 18px;
+  border-radius: 10px;
+  border: 1px solid var(--lj-border);
+  background: var(--lj-surface);
+}
+
+.lj-module-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--lj-text);
+}
+
+.lj-module-card p {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--lj-muted);
+}
+
+.lj-module-tag {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--lj-dim);
+  letter-spacing: 0.06em;
+}

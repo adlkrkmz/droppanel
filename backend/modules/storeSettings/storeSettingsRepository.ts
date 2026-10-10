@@ -8,6 +8,10 @@ import type {
   StoreSettingsRow,
   UpdateStoreSettingsInput,
 } from "./storeSettingsTypes"
+import {
+  isPricingMode,
+  normalizeTieredProfitOverrides,
+} from "../pricing/pricingService"
 
 function mapRow(r: Record<string, unknown>): StoreSettingsRow {
   return {
@@ -15,6 +19,9 @@ function mapRow(r: Record<string, unknown>): StoreSettingsRow {
     workspaceId:         r.workspace_id as string,
     storeId:             r.store_id as number,
     markupPercent:       Number(r.markup_percent),
+    pricingMode:         isPricingMode(r.pricing_mode) ? r.pricing_mode : "PERCENTAGE_NET_PROFIT",
+    percentageNetProfitPercent: Number(r.percentage_net_profit_percent ?? r.markup_percent ?? 35),
+    tieredProfitOverrides: normalizeTieredProfitOverrides(r.tiered_profit_overrides),
     profitMarginPercent: Number(r.profit_margin_percent),
     taxEstimatePercent:  Number(r.tax_estimate_percent),
     ebayFeePercent:      Number(r.ebay_fee_percent),
@@ -38,6 +45,7 @@ function mapRow(r: Record<string, unknown>): StoreSettingsRow {
     addressZip:          (r.address_zip as string | null) ?? null,
     addressCountry:      (r.address_country as string | null) ?? null,
     registrationCountry: (r.registration_country as string | null) ?? null,
+    warehouseShippingBannerEnabled: r.warehouse_shipping_banner_enabled === true,
   }
 }
 
@@ -78,6 +86,9 @@ export async function createSettings(
        workspace_id,
        store_id,
        markup_percent,
+       pricing_mode,
+       percentage_net_profit_percent,
+       tiered_profit_overrides,
        profit_margin_percent,
        tax_estimate_percent,
        ebay_fee_percent,
@@ -99,15 +110,19 @@ export async function createSettings(
        address_zip,
        address_country,
        registration_country,
+       warehouse_shipping_banner_enabled,
        created_at,
        updated_at
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW(),NOW())
+     VALUES ($1,$2,$3,$4::text,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,NOW(),NOW())
      RETURNING *`,
     [
       input.workspaceId,
       input.storeId,
       input.markupPercent       ?? 35,
+      input.pricingMode         ?? "PERCENTAGE_NET_PROFIT",
+      input.percentageNetProfitPercent ?? input.markupPercent ?? 35,
+      JSON.stringify(input.tieredProfitOverrides ?? []),
       input.profitMarginPercent ?? 20,
       input.taxEstimatePercent  ?? 0,
       input.ebayFeePercent      ?? 13,
@@ -129,6 +144,7 @@ export async function createSettings(
       input.addressZip          ?? null,
       input.addressCountry      ?? null,
       input.registrationCountry ?? null,
+      input.warehouseShippingBannerEnabled === true,
     ]
   )
   return mapRow(result.rows[0] as Record<string, unknown>)
@@ -151,6 +167,11 @@ export async function updateSettings(
   }
 
   add("markup_percent",         input.markupPercent)
+  add("pricing_mode",           input.pricingMode)
+  add("percentage_net_profit_percent", input.percentageNetProfitPercent)
+  if (input.tieredProfitOverrides !== undefined) {
+    add("tiered_profit_overrides", JSON.stringify(input.tieredProfitOverrides))
+  }
   add("profit_margin_percent",  input.profitMarginPercent)
   add("tax_estimate_percent",   input.taxEstimatePercent)
   add("ebay_fee_percent",       input.ebayFeePercent)
@@ -172,6 +193,7 @@ export async function updateSettings(
   add("address_zip",           input.addressZip)
   add("address_country",       input.addressCountry)
   add("registration_country",  input.registrationCountry)
+  add("warehouse_shipping_banner_enabled", input.warehouseShippingBannerEnabled)
 
   if (fields.length === 0) {
     return getSettingsByStore(workspaceId, storeId)

@@ -3,10 +3,10 @@
 //
 // Başarılı eBay publish sonuçlarını DB'ye yazar:
 //   1. asin_pool           → status / listing_status / pipeline_stage
-//   2. listing_history     → plain INSERT (no conflict constraint)
+//   2. listing_history     → insert (idempotent on store_id + ebay_item_id)
 //   3. store_catalog_state → upsert ON CONFLICT (store_id, asin_registry_id)
 //
-// workspace_id : process.env.WORKSPACE_ID  (zorunlu)
+// workspace_id : payload.workspaceId (exact publish workspace — never env WORKSPACE_ID)
 // store_id     : payload.assignedStoreId
 // ─────────────────────────────────────────────────────────────
 
@@ -14,11 +14,9 @@ import { query } from "../../db/client"
 import type { InventoryFlowResult } from "./ebayApiTypes"
 import type { EbayListingPayload } from "./ebayPayloadService"
 
-// ─── WORKSPACE GUARD ──────────────────────────────────────────
-
-function getWorkspaceId(): string {
-  const id = process.env.WORKSPACE_ID
-  if (!id) throw new Error("WORKSPACE_ID is not defined in environment")
+function resolvePersistWorkspaceId(payload: EbayListingPayload): string {
+  const id = String(payload.workspaceId ?? "").trim()
+  if (!id) throw new Error("payload.workspaceId is required for publish persistence")
   return id
 }
 
@@ -60,6 +58,26 @@ function isFlowFailed(result: InventoryFlowResult): boolean {
   )
 }
 
+function buildAmazonSourceUrl(asin: string): string {
+  const normalized = String(asin || "").trim().toUpperCase()
+  if (!/^[A-Z0-9]{10}$/.test(normalized)) return ""
+  return `https://www.amazon.com/dp/${normalized}`
+}
+
+function extractListingSnapshot(payload: EbayListingPayload) {
+  const imageUrl = payload.images?.find((u) => String(u).trim().length > 0)?.trim() ?? null
+  const sourcePrice = payload.amazonCost > 0 ? payload.amazonCost : null
+  const sourceUrl = buildAmazonSourceUrl(payload.asin)
+  return {
+    title:       payload.title?.trim() || null,
+    ebayPrice:   payload.price > 0 ? payload.price : null,
+    quantity:    payload.quantity > 0 ? payload.quantity : null,
+    imageUrl,
+    sourceUrl:   sourceUrl || null,
+    sourcePrice,
+  }
+}
+
 // ─── ADIM 1: asin_pool güncelle ───────────────────────────────
 
 async function updatePoolAfterPublish(poolId: number): Promise<boolean> {
@@ -83,6 +101,44 @@ async function insertListingHistory(
   workspaceId: string
 ): Promise<number | null> {
   const { result, payload } = input
+  const snap = extractListingSnapshot(payload)
+  const ebayItemId = String(result.ebayListingId ?? "").trim()
+  if (!ebayItemId) return null
+
+  // Idempotent: same store + ebay item must not create duplicate history rows.
+  const existing = await query<{ id: number }>(
+    `SELECT id FROM listing_history
+     WHERE store_id = $1 AND ebay_item_id = $2
+     ORDER BY id DESC
+     LIMIT 1`,
+    [payload.assignedStoreId, ebayItemId]
+  )
+  if (existing.rows[0]?.id) {
+    await query(
+      `UPDATE listing_history
+       SET workspace_id = $2,
+           asin_registry_id = $3,
+           internal_sku = COALESCE($4, internal_sku),
+           ebay_offer_id = COALESCE($5, ebay_offer_id),
+           amazon_url_snapshot = COALESCE($6, amazon_url_snapshot),
+           title_snapshot = COALESCE($7, title_snapshot),
+           price_snapshot = COALESCE($8, price_snapshot),
+           status = 'live',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        existing.rows[0].id,
+        workspaceId,
+        payload.asinRegistryId,
+        result.sku,
+        result.ebayOfferId,
+        snap.sourceUrl,
+        snap.title,
+        snap.ebayPrice,
+      ]
+    )
+    return existing.rows[0].id
+  }
 
   const res = await query<{ id: number }>(
     `INSERT INTO listing_history (
@@ -92,22 +148,28 @@ async function insertListingHistory(
        internal_sku,
        ebay_item_id,
        ebay_offer_id,
+       amazon_url_snapshot,
+       title_snapshot,
+       price_snapshot,
        status,
        listed_at,
        listing_job_ref,
        created_at,
        updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, 'live', NOW(), $7, NOW(), NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'live', NOW(), $10, NOW(), NOW())
      RETURNING id`,
     [
-      workspaceId,              // workspace_id = process.env.WORKSPACE_ID
-      payload.assignedStoreId,  // store_id
-      payload.asinRegistryId,   // asin_registry_id
-      result.sku,               // internal_sku
-      result.ebayListingId,     // ebay_item_id
-      result.ebayOfferId,       // ebay_offer_id
-      payload.poolId            // listing_job_ref
+      workspaceId,
+      payload.assignedStoreId,
+      payload.asinRegistryId,
+      result.sku,
+      ebayItemId,
+      result.ebayOfferId,
+      snap.sourceUrl,
+      snap.title,
+      snap.ebayPrice,
+      payload.poolId,
     ]
   )
 
@@ -121,6 +183,7 @@ async function upsertStoreCatalogState(
   workspaceId: string
 ): Promise<number | null> {
   const { result, payload } = input
+  const snap = extractListingSnapshot(payload)
 
   const res = await query<{ id: number }>(
     `INSERT INTO store_catalog_state (
@@ -130,6 +193,13 @@ async function upsertStoreCatalogState(
        internal_sku,
        ebay_item_id,
        ebay_offer_id,
+       ebay_title,
+       ebay_price,
+       ebay_quantity,
+       image_url,
+       source_url,
+       source_price,
+       ebay_price_synced_at,
        current_status,
        listed_at,
        last_seen_live_at,
@@ -138,27 +208,41 @@ async function upsertStoreCatalogState(
        created_at,
        updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, 'live', NOW(), NOW(), NOW(), $7, NOW(), NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), 'live', NOW(), NOW(), NOW(), $13, NOW(), NOW())
      ON CONFLICT (store_id, asin_registry_id)
      DO UPDATE SET
-       internal_sku      = EXCLUDED.internal_sku,
-       ebay_item_id      = EXCLUDED.ebay_item_id,
-       ebay_offer_id     = EXCLUDED.ebay_offer_id,
-       current_status    = 'live',
-       listed_at         = NOW(),
-       last_seen_live_at = NOW(),
-       last_sync_at      = NOW(),
-       source_of_truth   = EXCLUDED.source_of_truth,
-       updated_at        = NOW()
+       workspace_id         = EXCLUDED.workspace_id,
+       internal_sku         = EXCLUDED.internal_sku,
+       ebay_item_id         = EXCLUDED.ebay_item_id,
+       ebay_offer_id        = EXCLUDED.ebay_offer_id,
+       ebay_title           = EXCLUDED.ebay_title,
+       ebay_price           = EXCLUDED.ebay_price,
+       ebay_quantity        = EXCLUDED.ebay_quantity,
+       image_url            = COALESCE(EXCLUDED.image_url, store_catalog_state.image_url),
+       source_url           = COALESCE(EXCLUDED.source_url, store_catalog_state.source_url),
+       source_price         = COALESCE(EXCLUDED.source_price, store_catalog_state.source_price),
+       ebay_price_synced_at = NOW(),
+       current_status       = 'live',
+       listed_at            = COALESCE(store_catalog_state.listed_at, EXCLUDED.listed_at),
+       last_seen_live_at    = NOW(),
+       last_sync_at         = NOW(),
+       source_of_truth      = EXCLUDED.source_of_truth,
+       updated_at           = NOW()
      RETURNING id`,
     [
-      workspaceId,              // workspace_id = process.env.WORKSPACE_ID
-      payload.assignedStoreId,  // store_id
-      payload.asinRegistryId,   // asin_registry_id
-      result.sku,               // internal_sku
-      result.ebayListingId,     // ebay_item_id
-      result.ebayOfferId,       // ebay_offer_id
-      "ebay_simulation"         // source_of_truth
+      workspaceId,
+      payload.assignedStoreId,
+      payload.asinRegistryId,
+      result.sku,
+      result.ebayListingId,
+      result.ebayOfferId,
+      snap.title,
+      snap.ebayPrice,
+      snap.quantity,
+      snap.imageUrl,
+      snap.sourceUrl,
+      snap.sourcePrice,
+      "publish_snapshot",
     ]
   )
 
@@ -170,16 +254,14 @@ async function upsertStoreCatalogState(
 export async function persistPublishResults(
   inputs: PersistenceInput[]
 ): Promise<PersistenceSummary> {
-  const workspaceId = getWorkspaceId()
-
-  console.log(`[Persistence] Starting — ${inputs.length} item | workspace=${workspaceId}`)
+  console.log(`[Persistence] Starting — ${inputs.length} item(s)`)
 
   const rows: PersistenceRowResult[] = []
   let succeeded = 0
   let failed    = 0
 
   for (const input of inputs) {
-    const { result } = input
+    const { result, payload } = input
     const { poolId, asin, sku } = result
 
     const row: PersistenceRowResult = {
@@ -201,12 +283,76 @@ export async function persistPublishResults(
       continue
     }
 
+    if (!String(result.ebayListingId ?? "").trim()) {
+      row.error = "Missing ebayListingId — skipping persistence"
+      rows.push(row)
+      failed++
+      console.log(`  [Persistence] Skipped: ASIN=${asin} | ${row.error}`)
+      continue
+    }
+
+    if (!String(result.ebayOfferId ?? "").trim()) {
+      row.error = "PUBLISH_MISSING_OFFER_ID"
+      console.warn(`  [Persistence] Publish succeeded without offerId ASIN=${asin} listingId=${result.ebayListingId}`)
+    }
+
+    if (!Number.isInteger(payload.assignedStoreId) || payload.assignedStoreId <= 0) {
+      row.error = "Missing assignedStoreId — skipping persistence"
+      rows.push(row)
+      failed++
+      console.log(`  [Persistence] Skipped: ASIN=${asin} | ${row.error}`)
+      continue
+    }
+
     try {
+      const workspaceId = resolvePersistWorkspaceId(payload)
+      console.log(
+        `[Persistence] item ASIN=${asin} workspace=${workspaceId} store_id=${payload.assignedStoreId}`
+      )
       row.poolUpdated      = await updatePoolAfterPublish(poolId)
       row.listingHistoryId = await insertListingHistory(input, workspaceId)
       row.catalogStateId   = await upsertStoreCatalogState(input, workspaceId)
-      row.persisted        = true
-      succeeded++
+      if (row.catalogStateId) {
+        try {
+          const { trySyncGlobalAsinConsumerFromCatalog } = await import("../globalKeepa/globalAsinConsumerSync")
+          await trySyncGlobalAsinConsumerFromCatalog({
+            workspaceId,
+            storeId: payload.assignedStoreId,
+            catalogStateId: row.catalogStateId,
+          })
+        } catch {
+          /* consumer sync must not block persist */
+        }
+        try {
+          const { emitKeepaAsinSyncForCatalog } = await import("../keepaSensor/keepaAsinSyncOutbox")
+          await emitKeepaAsinSyncForCatalog({
+            workspaceId,
+            storeId: payload.assignedStoreId,
+            catalogStateId: row.catalogStateId,
+          })
+        } catch {
+          /* Keepa emit must not block persist */
+        }
+      }
+      row.persisted = true
+      if (row.error === "PUBLISH_MISSING_OFFER_ID") {
+        failed++
+      } else {
+        succeeded++
+      }
+
+      const snap = extractListingSnapshot(payload)
+      console.log("[ListingPersistence] saved local listing snapshot", {
+        asin,
+        sku,
+        storeCode: payload.storeCode,
+        ebayItemId: result.ebayListingId,
+        ebayOfferId: result.ebayOfferId,
+        ebayPrice: snap.ebayPrice,
+        sourcePrice: snap.sourcePrice,
+        hasImage: Boolean(snap.imageUrl),
+        titlePreview: snap.title ? String(snap.title).slice(0, 80) : null,
+      })
       console.log(
         `  [Persistence] OK: ASIN=${asin} | ` +
         `listing_history.id=${row.listingHistoryId} | ` +

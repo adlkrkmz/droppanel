@@ -73,9 +73,9 @@ export async function runDispatch(
 
   console.log(`[Dispatch] Store found: ${store.name} (id=${store.id})`)
 
-  // 2. Mağazada zaten listelenmiş ASIN'leri çek
-  const alreadyListed = await fetchAlreadyListedAsins(workspaceId, store.id)
-  console.log(`[Dispatch] Already listed in store: ${alreadyListed.size} ASIN`)
+  // 2. Bu workspace'e bağlı aktif mağazalarda zaten canlı olan ASIN'leri çek
+  const alreadyListed = await fetchAlreadyListedAsins(workspaceId)
+  console.log(`[Dispatch] Already live in connected stores: ${alreadyListed.size} ASIN`)
 
   // 3. Uygun adayları çek (count * 5 buffer — duplicate elendikten sonra count kalmalı)
   const fetchLimit = Math.min(count * 5, 1000)

@@ -1,0 +1,293 @@
+// ----------------------------------------------------------------
+
+// appListingsService.ts — user-safe listing reads
+
+// ----------------------------------------------------------------
+
+
+
+import { query } from "../../db/client"
+
+import { getRecommendedPriceForListing } from "../listings/listingsEbayPriceService"
+
+import { resolveListingAsin } from "../monitor/monitorService"
+
+import {
+
+  LISTINGS_BASE_FROM_JOIN,
+
+  LISTINGS_BASE_WHERE,
+
+  listingsFilterWhereClause,
+
+} from "./appListingFilters"
+
+import type {
+
+  AppListingItem,
+
+  AppListingsFilter,
+
+  AppListingsResponse,
+
+  AppRecommendedPriceResponse,
+
+} from "./appTypes"
+
+import type { OwnedStore } from "./appOwnership"
+
+
+
+function parsePrice(raw: string | null | undefined): number | null {
+
+  const trimmed = raw?.trim()
+
+  if (!trimmed) return null
+
+  const n = parseFloat(trimmed)
+
+  return Number.isFinite(n) ? n : null
+
+}
+
+
+
+export async function getAppListings(input: {
+
+  workspaceId: string
+
+  store:       OwnedStore
+
+  page:        number
+
+  limit:       number
+
+  filter:      AppListingsFilter
+
+}): Promise<AppListingsResponse> {
+
+  const safeLimit  = Math.max(1, Math.min(100, input.limit))
+
+  const safePage   = Math.max(1, input.page)
+
+  const safeOffset = (safePage - 1) * safeLimit
+
+  const filterWhere = listingsFilterWhereClause(input.filter)
+
+
+
+  const countRes = await query<{ total: string }>(
+
+    `SELECT COUNT(*)::text AS total
+
+     ${LISTINGS_BASE_FROM_JOIN}
+
+     ${LISTINGS_BASE_WHERE}
+
+       ${filterWhere}`,
+
+    [input.workspaceId, input.store.storeCode]
+
+  )
+
+  const total = parseInt(countRes.rows[0]?.total ?? "0", 10) || 0
+
+
+
+  const listRes = await query<{
+
+    id: number
+
+    ebay_item_id: string | null
+
+    ebay_title: string | null
+
+    registry_asin: string | null
+
+    source_url: string | null
+
+    internal_sku: string
+
+    ebay_price: string | null
+
+    source_price: string | null
+
+    source_price_source: string | null
+
+    ebay_quantity: number | null
+
+    auto_price_protected_at: string | null
+
+    auto_price_old_ebay_price: string | null
+
+    auto_price_new_ebay_price: string | null
+
+    stock_guard_enabled: boolean
+
+    current_status: string | null
+
+    source_checked_at: string | null
+
+    updated_at: string | null
+
+  }>(
+
+    `SELECT scs.id,
+
+            scs.ebay_item_id,
+
+            scs.ebay_title,
+
+            ar.asin AS registry_asin,
+
+            scs.source_url,
+
+            scs.internal_sku,
+
+            scs.ebay_price::text AS ebay_price,
+
+            scs.source_price::text AS source_price,
+
+            scs.source_price_source,
+
+            scs.ebay_quantity,
+
+            scs.auto_price_protected_at::text AS auto_price_protected_at,
+
+            scs.auto_price_old_ebay_price::text AS auto_price_old_ebay_price,
+
+            scs.auto_price_new_ebay_price::text AS auto_price_new_ebay_price,
+
+            COALESCE(scs.stock_guard_enabled, true) AS stock_guard_enabled,
+
+            scs.current_status::text AS current_status,
+
+            scs.source_checked_at::text AS source_checked_at,
+
+            scs.updated_at::text AS updated_at
+
+     ${LISTINGS_BASE_FROM_JOIN}
+
+     ${LISTINGS_BASE_WHERE}
+
+       ${filterWhere}
+
+     ORDER BY scs.updated_at DESC
+
+     LIMIT $3 OFFSET $4`,
+
+    [input.workspaceId, input.store.storeCode, safeLimit, safeOffset]
+
+  )
+
+
+
+  const items: AppListingItem[] = listRes.rows.map(r => ({
+
+    catalogStateId:        r.id,
+
+    ebayItemId:            r.ebay_item_id?.trim() || null,
+
+    title:                 r.ebay_title?.trim() || null,
+
+    asin: resolveListingAsin({
+
+      registryAsin: r.registry_asin,
+
+      sourceUrl:    r.source_url,
+
+      internalSku:  r.internal_sku?.trim() ?? "",
+
+    }),
+
+    ebayPrice:             parsePrice(r.ebay_price),
+
+    sourcePrice:           parsePrice(r.source_price),
+
+    sourcePriceSource:     r.source_price_source?.trim() || null,
+
+    ebayQuantity:          r.ebay_quantity ?? null,
+
+    status:                r.current_status?.trim() || null,
+
+    autoPriceProtectedAt:  r.auto_price_protected_at?.trim() || null,
+
+    autoPriceOldEbayPrice: parsePrice(r.auto_price_old_ebay_price),
+
+    autoPriceNewEbayPrice: parsePrice(r.auto_price_new_ebay_price),
+
+    stockGuardEnabled:     r.stock_guard_enabled !== false,
+
+    lastCheckedAt:         r.source_checked_at?.trim() || null,
+
+    updatedAt:             r.updated_at?.trim() || null,
+
+  }))
+
+
+
+  return {
+
+    ok:        true,
+
+    storeCode: input.store.storeCode,
+
+    page:      safePage,
+
+    limit:     safeLimit,
+
+    filter:    input.filter,
+
+    total,
+
+    items,
+
+  }
+
+}
+
+
+
+export async function getAppRecommendedPrice(input: {
+
+  workspaceId:    string
+
+  storeCode:      string
+
+  catalogStateId: number
+
+}): Promise<AppRecommendedPriceResponse> {
+
+  const pricing = await getRecommendedPriceForListing(
+
+    input.workspaceId,
+
+    input.storeCode,
+
+    input.catalogStateId
+
+  )
+
+
+
+  return {
+
+    ok:                   true,
+
+    catalogStateId:       input.catalogStateId,
+
+    amazonPrice:          pricing.amazonPrice,
+
+    currentEbayPrice:     pricing.currentEbayPrice,
+
+    storeMarkupPercent:   pricing.storeMarkupPercent,
+
+    recommendedEbayPrice: pricing.recommendedEbayPrice,
+
+    pricingSource:        pricing.pricingSource,
+
+  }
+
+}
+
+

@@ -1,0 +1,5 @@
+/**
+ * Legacy Phase H styles (scanner, pulse grid, ASIN strip, modules).
+ * Not imported in Phase 1 — reuse when §6+ simulations ship.
+ * @see InteractiveScanner.tsx, MarketPulseGrid.tsx, etc.
+ */

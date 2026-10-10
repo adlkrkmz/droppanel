@@ -1,0 +1,23 @@
+[Unit]
+Description=ListJetGo Amazon public scan worker (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=listjetgoscan
+Group=listjetgoscan
+WorkingDirectory=/opt/listjetgo-amazon-scan
+EnvironmentFile=-/etc/listjetgo-amazon-scan/worker.env
+Environment=AMAZON_PUBLIC_WORKER_SLOT=%i
+Environment=AMAZON_SCAN_WORKER_ROLE=ROUTINE
+Environment=AMAZON_PUBLIC_WORKER_COUNT=4
+Environment=AMAZON_PUBLIC_WORKER_PROFILE_DIR=/var/lib/listjetgo-amazon-scan/profile-%i
+NoNewPrivileges=true
+PrivateTmp=true
+Restart=on-failure
+RestartSec=8
+ExecStart=/opt/listjetgo-amazon-scan/node_modules/.bin/ts-node --transpile-only amazon-scan-worker.ts
+
+[Install]
+WantedBy=multi-user.target

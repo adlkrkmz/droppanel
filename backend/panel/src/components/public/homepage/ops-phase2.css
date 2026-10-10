@@ -1,0 +1,512 @@
+/* SOURCE ONLY — bundled into homepage-entry.css. Do not import. */
+
+/* —— Infrastructure canvas —— */
+.ops-infra-canvas {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.ops-infra-canvas--lite {
+  opacity: 0.55;
+}
+
+.ops-hero-infra {
+  opacity: var(--ops-infra-opacity, 0.52);
+}
+
+.ops-home {
+  --ops-infra-opacity: 0.52;
+}
+
+@media (max-width: 767px) {
+  .ops-home {
+    --ops-infra-opacity: 0.32;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-infra-canvas {
+    will-change: auto;
+  }
+}
+
+/* CTA hover energizes nearby routes (no JS) */
+.ops-hero:has(.ops-hero-ctas a:hover) .ops-infra-route {
+  stroke-opacity: 0.55;
+}
+
+.ops-hero:has(.ops-hero-ctas a:hover) .ops-infra-node--pulse .ops-infra-node-dot {
+  opacity: 0.85;
+  transform: scale(1.15);
+}
+
+/* —— SVG routes —— */
+.ops-infra-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ops-infra-route {
+  fill: none;
+  stroke: var(--ops-route);
+  stroke-width: 0.4;
+  stroke-opacity: 0.34;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+  transition: stroke-opacity 0.6s var(--ops-ease);
+}
+
+.ops-infra-route-group--chaos .ops-infra-route {
+  stroke: rgba(168, 139, 77, 0.35);
+  stroke-opacity: 0.28;
+}
+
+.ops-infra-route--dead {
+  stroke-dasharray: 1 4;
+  stroke-opacity: 0.15;
+}
+
+.ops-infra-route--signal {
+  stroke-opacity: 0.58;
+  animation: ops-route-breathe 5s ease-in-out infinite;
+}
+
+/* Traveling light segment along active route */
+.ops-infra-route-travel {
+  fill: none;
+  stroke: var(--ops-highlight);
+  stroke-width: 0.55;
+  stroke-opacity: 0.72;
+  stroke-dasharray: 6 94;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  animation: ops-signal-travel linear infinite;
+}
+
+@keyframes ops-signal-travel {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ops-flow-sim--orchestrated .ops-infra-route {
+  stroke: rgba(77, 168, 120, 0.4);
+  stroke-opacity: 0.32;
+}
+
+.ops-infra-signal-dot {
+  fill: var(--ops-highlight);
+  opacity: 0.82;
+  filter: none;
+}
+
+.ops-infra-signal-dot--static {
+  opacity: 0.75;
+}
+
+@keyframes ops-route-breathe {
+  0%,
+  100% {
+    stroke-opacity: 0.22;
+  }
+  50% {
+    stroke-opacity: 0.42;
+  }
+}
+
+/* —— Nodes —— */
+.ops-infra-nodes {
+  position: absolute;
+  inset: 0;
+}
+
+.ops-infra-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.ops-infra-node-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ops-route);
+  opacity: 0.58;
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+
+.ops-infra-node--hub .ops-infra-node-dot {
+  width: 9px;
+  height: 9px;
+  background: var(--ops-highlight);
+  opacity: 0.72;
+}
+
+.ops-infra-node--chaos .ops-infra-node-dot {
+  background: rgba(168, 139, 77, 0.6);
+}
+
+.ops-flow-sim--orchestrated .ops-infra-node-dot {
+  background: rgba(77, 168, 120, 0.55);
+}
+
+.ops-infra-node-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-text-secondary);
+  opacity: 0.82;
+  white-space: nowrap;
+}
+
+.ops-infra-node--pulse .ops-infra-node-dot {
+  animation: ops-node-pulse 4.5s ease-in-out infinite;
+}
+
+.ops-flow-sim--orchestrated .ops-infra-node--pulse .ops-infra-node-dot {
+  animation: ops-node-pulse-steady 3.5s ease-in-out infinite;
+}
+
+@keyframes ops-node-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.78;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes ops-node-pulse-steady {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-infra-route-travel {
+    display: none;
+  }
+
+  .ops-infra-signal-dot:not(.ops-infra-signal-dot--static) {
+    display: none;
+  }
+
+  .ops-infra-route--signal {
+    animation: none;
+    stroke-opacity: 0.5;
+  }
+
+  .ops-infra-node--pulse .ops-infra-node-dot {
+    animation: none;
+    opacity: 0.65;
+  }
+
+  .ops-infra-route {
+    stroke-opacity: 0.38;
+  }
+
+  .ops-infra-node-dot {
+    opacity: 0.55;
+  }
+}
+
+/* —— Hero infra layer —— */
+.ops-hero-planes--infra {
+  z-index: 0;
+}
+
+/* —— Operational flow simulation —— */
+.ops-flow-sim {
+  position: relative;
+  width: 100%;
+  height: clamp(140px, 22vw, 200px);
+  margin-bottom: 24px;
+  border-radius: 6px;
+  background: var(--ops-panel-inset);
+  border: 1px solid var(--ops-border);
+  overflow: hidden;
+}
+
+.ops-flow-sim-canvas {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+}
+
+.ops-flow-sim .ops-infra-route {
+  stroke-opacity: 0.38;
+}
+
+.ops-flow-sim--chaos .ops-infra-route-group--chaos .ops-infra-route {
+  stroke-opacity: 0.42;
+}
+
+.ops-flow-sim--orchestrated .ops-infra-route {
+  stroke-opacity: 0.4;
+}
+
+.ops-compare-list--compact {
+  gap: 12px;
+  margin-top: 0;
+}
+
+.ops-compare-list--compact .ops-compare-item {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+/* —— Marketplace mode switcher —— */
+.ops-mode-section {
+  position: relative;
+  padding: clamp(64px, 8vh, 88px) 20px clamp(72px, 10vh, 100px);
+  background: var(--ops-void);
+  border-top: 1px solid var(--ops-border);
+  scroll-margin-top: var(--ops-nav-height);
+}
+
+.ops-mode-inner {
+  max-width: var(--ops-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ops-mode-header {
+  max-width: 52ch;
+  margin-bottom: 32px;
+}
+
+.ops-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.ops-mode-tab {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-text-tertiary);
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-border);
+  cursor: pointer;
+  transition:
+    color 0.2s var(--ops-ease),
+    border-color 0.2s var(--ops-ease),
+    background 0.2s var(--ops-ease);
+}
+
+.ops-mode-tab:hover {
+  color: var(--ops-text-secondary);
+  border-color: var(--ops-border-strong);
+}
+
+.ops-mode-tab--active {
+  color: var(--ops-text-primary);
+  border-color: var(--ops-border-strong);
+  background: var(--ops-panel-inset);
+}
+
+.ops-mode-viz {
+  position: relative;
+  height: clamp(220px, 32vw, 320px);
+  overflow: hidden;
+}
+
+.ops-mode-viz-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(6px) scale(0.99);
+  transition:
+    opacity 700ms var(--ops-ease),
+    transform 700ms var(--ops-ease);
+  pointer-events: none;
+}
+
+.ops-mode-viz-layer--active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.ops-mode-viz-wrap {
+  border-radius: 8px;
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-border);
+  overflow: hidden;
+}
+
+.ops-mode-viz-wrap .ops-mode-viz {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ops-mode-canvas {
+  opacity: 0.48;
+}
+
+.ops-mode-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ops-border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-text-tertiary);
+  background: var(--ops-panel-inset);
+}
+
+.ops-mode-status-segment {
+  color: var(--ops-text-secondary);
+  opacity: 0.88;
+}
+
+.ops-mode-status-sep {
+  color: var(--ops-text-tertiary);
+  opacity: 0.5;
+  margin: 0 6px;
+}
+
+.ops-mode--ebay .ops-infra-route {
+  stroke-dasharray: 1 2;
+}
+
+.ops-mode--pinterest .ops-infra-route--signal {
+  stroke-dasharray: 3 2;
+}
+
+/* —— Ambient system labels (only visible when .ops-home bundle loaded) —— */
+.ops-home .ops-ambient-labels {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  clip: auto;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ops-ambient-label {
+  position: absolute;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ops-text-tertiary);
+  opacity: 0.12;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.ops-ambient-label--blink {
+  animation: ops-label-blink 8s ease-in-out infinite;
+}
+
+@keyframes ops-label-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 0.08;
+  }
+  78% {
+    opacity: 0.18;
+  }
+}
+
+@media (max-width: 767px) {
+  .ops-ambient-label {
+    opacity: 0.08;
+  }
+
+  .ops-ambient-label--blink {
+    animation: none;
+  }
+
+  .ops-mode-viz {
+    height: 200px;
+  }
+
+  .ops-mode-canvas {
+    opacity: 0.4;
+  }
+
+  .ops-infra-route {
+    stroke-opacity: 0.28;
+  }
+
+  .ops-infra-node-dot {
+    opacity: 0.5;
+  }
+
+  .ops-infra-node-label {
+    font-size: 0.4375rem;
+    opacity: 0.72;
+  }
+
+  .ops-infra-signal-dot {
+    opacity: 0.7;
+  }
+
+  .ops-flow-sim {
+    height: 120px;
+  }
+
+  .ops-mode-status {
+    font-size: 0.5625rem;
+    padding: 10px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-mode-viz-layer {
+    transition: opacity 0.01ms;
+    transform: none;
+  }
+
+  .ops-ambient-label--blink {
+    animation: none;
+    opacity: 0.1;
+  }
+}
+
+/* Shell positioning for ambient labels */
+.ops-shell.ops-home {
+  position: relative;
+}

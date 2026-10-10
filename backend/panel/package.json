@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "npm run bundle:homepage-css && next dev --webpack",
+    "bundle:homepage-css": "node scripts/bundle-homepage-css.mjs",
+    "prebuild": "node scripts/bundle-homepage-css.mjs",
     "build": "next build",
-    "start": "next start"
+    "postbuild": "node scripts/verify-homepage-css.mjs",
+    "verify:homepage-css": "node scripts/verify-homepage-css.mjs",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.6",

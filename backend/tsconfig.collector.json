@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "keepa-collector.ts",
+    "modules/keepaSensor/**/*.ts",
+    "modules/keepa/**/*.ts",
+    "modules/globalKeepa/**/*.ts",
+    "fixtures/**/*.ts"
+  ],
+  "exclude": ["node_modules", "modules/amazonBrowserWorker", "modules/amazonPublicWorker", "modules/keepaSensor/keepaDirectMutationGate.ts"]
+}

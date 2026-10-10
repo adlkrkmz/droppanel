@@ -15,18 +15,29 @@
 import { isBlockedKey, selectBestCategory } from "../aiListing/aiListingService"
 import { getValidAccessToken } from "../ebayOAuth/ebayOAuthService"
 import { processAndUploadImages } from "../imageProcessor/imageProcessorService"
+import { createSlideshow } from '../video/videoService'
 import { alertPublishFailed } from "../notifications/telegramService"
-import { warehouseMerchantLocationKey } from "../settings/settingsService"
 import { getSettingsByStore } from "../storeSettings/storeSettingsRepository"
-import type { StoreSettingsRow } from "../storeSettings/storeSettingsTypes"
-import type { EbayMerchantLocationAddress } from "./ebayApiClient"
+import {
+  ensureWarehouseMerchantLocationOnEbay,
+  merchantAddressFromStoreRow,
+  resolveMerchantLocationKey,
+} from "./ebayLocationService"
 import { EbayApiClient } from "./ebayApiClient"
 import type {
   EbayCreateOfferRequest,
   EbayInventoryItemRequest,
   InventoryFlowResult,
 } from "./ebayApiTypes"
-import type { EbayListingPayload } from "./ebayPayloadService"
+import type { EbayListingPayload, TitleMode } from "./ebayPayloadService"
+import { allowsGeminiCategory } from "../listingAiMode/listingAiModeService"
+import {
+  findMissingRequiredEbayAspects,
+  isMeaningfulEbayAspectName,
+  completeRequiredEbayAspects,
+  type RequiredAspectCompletionEvidence,
+  sanitizeEbayAspectMap,
+} from "./ebayItemSpecificValidation"
 
 const SETTINGS_ERROR =
   "Store settings not configured. Please set policies in Settings page."
@@ -34,6 +45,15 @@ const SETTINGS_ERROR =
 const DEFAULT_MARKETPLACE = "EBAY_US"
 
 const DOES_NOT_APPLY = ["Does Not Apply"] as const
+
+function isSyntheticImageUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return hostname === "example.com" || hostname.endsWith(".example.com")
+  } catch {
+    return true
+  }
+}
 
 /** AI/specs’ten gelen bu anahtarlar silinir; sabit "Does Not Apply" yazılır */
 const ASPECT_KEYS_FORCE_DNA = [
@@ -58,6 +78,9 @@ const ASPECT_KEYS_FORCE_DNA = [
 export type InventoryFlowClientOptions = {
   sandbox:        boolean
   simulationMode: boolean
+  titleMode?:     TitleMode
+  workspaceId?:   string
+  storeId?:       number
 }
 
 function escapeRegExp(s: string): string {
@@ -104,7 +127,7 @@ function itemSpecificsToAspects(specs: Record<string, string>): Record<string, s
   for (const [k, v] of Object.entries(specs)) {
     const key = k.trim()
     const val = v.trim()
-    if (!key || !val) continue
+    if (!isMeaningfulEbayAspectName(key) || !val) continue
     aspects[key] = [val]
   }
   return aspects
@@ -221,7 +244,7 @@ function buildProductAspects(payload: EbayListingPayload): Record<string, string
   aspects["EAN"]   = [...DOES_NOT_APPLY]
   aspects["ISBN"]  = [...DOES_NOT_APPLY]
 
-  return aspects
+  return sanitizeEbayAspectMap(aspects)
 }
 
 function parseOfferIdFromCreateOfferError(message: string): string | null {
@@ -289,58 +312,12 @@ async function createOfferOrExisting(
   }
 }
 
-function merchantAddressFromStoreRow(row: StoreSettingsRow): EbayMerchantLocationAddress | null {
-  const country = row.addressCountry?.trim()
-  const city = row.addressCity?.trim()
-  const state = row.addressState?.trim()
-  const line1 = row.addressLine1?.trim()
-  const zip = row.addressZip?.trim()
-  if (!country || !city || !state || !line1 || !zip) return null
-  return {
-    addressLine1:    line1,
-    city,
-    stateOrProvince: state,
-    postalCode:      zip,
-    country,
-  }
-}
-
-async function tryEnsureWarehouseLocation(
-  client: EbayApiClient,
-  storeCode: string,
-  storeRow: StoreSettingsRow
-): Promise<void> {
-  const whKey = warehouseMerchantLocationKey(storeCode)
-  const addr  = merchantAddressFromStoreRow(storeRow)
-  if (!addr) {
-    console.warn(
-      `[InventoryFlow] Incomplete address in store_settings — skip eBay location sync for ${whKey}`
-    )
-    return
-  }
-  try {
-    const res = await client.getMerchantLocation(whKey)
-    if (res.kind === "error") {
-      console.warn(`[InventoryFlow] getMerchantLocation(${whKey}): ${res.message}`)
-      return
-    }
-    if (res.kind === "found") return
-    await client.createMerchantLocation(whKey, addr)
-    console.log(`[InventoryFlow] eBay merchant location created: ${whKey}`)
-  } catch (e) {
-    console.warn(
-      `[InventoryFlow] merchant location ${whKey}: ${e instanceof Error ? e.message : String(e)}`
-    )
-  }
-}
-
 export async function runInventoryFlow(
   payload: EbayListingPayload,
   options: InventoryFlowClientOptions
 ): Promise<InventoryFlowResult> {
   const startTime = Date.now()
   const { poolId, asin, sku } = payload
-  const whKey = warehouseMerchantLocationKey(payload.storeCode)
 
   const result: InventoryFlowResult = {
     poolId,
@@ -356,7 +333,7 @@ export async function runInventoryFlow(
   }
 
   try {
-    const workspaceId = getWorkspaceId()
+    const workspaceId = options.workspaceId ?? getWorkspaceId()
     const accessToken = await getValidAccessToken(
       workspaceId,
       payload.storeCode,
@@ -368,7 +345,10 @@ export async function runInventoryFlow(
       simulationMode: options.simulationMode,
     })
 
-    const storeRow = await getSettingsByStore(workspaceId, payload.assignedStoreId)
+    const storeRow = await getSettingsByStore(
+      workspaceId,
+      options.storeId ?? payload.assignedStoreId
+    )
     if (!storeRow) {
       throw new Error(SETTINGS_ERROR)
     }
@@ -381,7 +361,24 @@ export async function runInventoryFlow(
       throw new Error(SETTINGS_ERROR)
     }
 
+    const whKey = resolveMerchantLocationKey(payload.storeCode, storeRow)
+    const merchantAddr = merchantAddressFromStoreRow(storeRow)
+    if (!merchantAddr) {
+      throw new Error(
+        "Store address incomplete. Configure Location in Settings before publishing."
+      )
+    }
+
+    console.log(
+      `[eBayPublish] storeCode=${payload.storeCode} using merchantLocationKey=${whKey} from fresh store settings`
+    )
+
     // ── Image upload ──────────────────────────────────────────────────────
+    const syntheticImageUrl = payload.images?.find(isSyntheticImageUrl)
+    if (syntheticImageUrl) {
+      throw new Error(`IMAGE_SOURCE_INVALID: synthetic or placeholder image URL (${syntheticImageUrl})`)
+    }
+
     if (!payload.images || payload.images.length === 0) {
       console.warn(`  [InventoryFlow] ASIN=${asin} — payload.images BOŞ! amazon_product_cache.images NULL olabilir. Görsel yüklenemeyecek.`)
     } else {
@@ -392,6 +389,7 @@ export async function runInventoryFlow(
     let imageUrls = await processAndUploadImages({
       imageUrls: payload.images,
       asin:      payload.asin,
+      warehouseShippingBannerEnabled: storeRow.warehouseShippingBannerEnabled === true,
     })
     console.log("[InventoryFlow] imageUrls count:", imageUrls.length, "| [0]:", imageUrls[0] ?? "(empty)")
 
@@ -440,20 +438,30 @@ export async function runInventoryFlow(
       console.warn(`[InventoryFlow] ASIN=${asin} — description ${before} → ${description.length} karaktere kısaltıldı (eBay limiti)`)
     }
 
-    await tryEnsureWarehouseLocation(client, payload.storeCode, storeRow)
+    await ensureWarehouseMerchantLocationOnEbay(
+      client,
+      payload.storeCode,
+      merchantAddr,
+      { strict: true }
+    )
 
     const suggestions = await client.getCategorySuggestions(payload.title, payload.amazonCategory)
+    const titleMode: TitleMode = options.titleMode ?? "ai"
+    const useGeminiCategory = allowsGeminiCategory(titleMode)
     const categoryId =
-      suggestions.length > 1
-        ? await selectBestCategory(payload.title, payload.itemSpecifics, suggestions)
+      suggestions.length > 1 && useGeminiCategory
+        ? await selectBestCategory(payload.title, payload.itemSpecifics, suggestions, { useAi: true })
         : suggestions[0]?.categoryId ?? "0"
-    console.log(`  [InventoryFlow] categoryId=${categoryId} (taxonomy${suggestions.length > 1 ? "+gemini" : ""})`)
+    console.log(
+      `  [InventoryFlow] categoryId=${categoryId} (taxonomy${useGeminiCategory && suggestions.length > 1 ? "+gemini" : ""})`
+    )
 
     {
       const raw = payload.itemSpecifics ?? {}
       const cleaned: Record<string, string> = {}
       for (const [k, v] of Object.entries(raw)) {
         if (isBlockedKey(k)) continue
+        if (!isMeaningfulEbayAspectName(k)) continue
         const s = String(v).trim()
         if (s.length === 0) continue
         cleaned[k] = s
@@ -597,30 +605,19 @@ export async function runInventoryFlow(
 
     const aspects = buildProductAspects(payload)
 
-    try {
-      const requiredAspects = await client.getRequiredAspectsForCategory(categoryId)
-      if (requiredAspects.length > 0) {
-        console.log(`[InventoryFlow] Required aspects from eBay: ${requiredAspects.map(a => a.name).join(", ")}`)
-
-        for (const ra of requiredAspects) {
-          const existing = aspects[ra.name]
-          if (
-            !existing ||
-            existing.length === 0 ||
-            existing[0] === "Does Not Apply" ||
-            existing[0] === "Does not apply"
-          ) {
-            const fallbackValue = ra.values[0] || "Does Not Apply"
-            aspects[ra.name] = [fallbackValue]
-            console.log(`[InventoryFlow] Required aspect filled: ${ra.name} = ${fallbackValue}`)
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(
-        `[InventoryFlow] Required aspects check failed:`,
-        e instanceof Error ? e.message : e
-      )
+    const requiredAspects = await client.getRequiredAspectsForCategory(categoryId)
+    const requiredAspectEvidence: RequiredAspectCompletionEvidence[] = []
+    const normalizedRequiredAspects = completeRequiredEbayAspects({
+      aspects,
+      requiredAspects,
+      title: payload.title,
+      evidence: requiredAspectEvidence,
+    })
+    Object.keys(aspects).forEach((key) => delete aspects[key])
+    Object.assign(aspects, normalizedRequiredAspects)
+    const forcedRequiredFallbacks = requiredAspectEvidence.filter((entry) => entry.source === "first_allowed")
+    if (forcedRequiredFallbacks.length > 0) {
+      console.warn("[InventoryFlow] REQUIRED_ASPECT_FIRST_ALLOWED_FALLBACK", forcedRequiredFallbacks)
     }
 
     // Zorunlu aspectler eklendi, şimdi 45'e kırp
@@ -662,6 +659,18 @@ export async function runInventoryFlow(
       Object.keys(aspects).forEach(k => delete aspects[k])
       Object.assign(aspects, kept)
       console.log(`[InventoryFlow] aspects kırpıldı: ${Object.keys(aspects).length}`)
+    }
+
+    if (requiredAspects.length > 0) {
+      console.log(`[InventoryFlow] Required aspects from eBay: ${requiredAspects.map(a => a.name).join(", ")}`)
+      const missingRequired = findMissingRequiredEbayAspects(aspects, requiredAspects)
+      if (missingRequired.length > 0) {
+        result.error = `MISSING_REQUIRED_ITEM_SPECIFIC: ${missingRequired.join(", ")}`
+        result.missingAspectNames = missingRequired
+        result.durationMs = Date.now() - startTime
+        console.warn(`[InventoryFlow] ${result.error}; publish blocked before inventory/offer creation`)
+        return result
+      }
     }
 
     console.log(`[InventoryFlow] Final aspects Brand=${JSON.stringify(aspects["Brand"])} keys=${Object.keys(aspects).length}`)
@@ -735,6 +744,20 @@ export async function runInventoryFlow(
     result.ebayOfferId = offerResp.offerId
 
     const publishResp = await client.publishOffer(offerResp.offerId)
+
+    // Video oluştur ve eBay'e yükle (non-critical)
+    try {
+      if (payload.images && payload.images.length >= 3) {
+        console.log('[InventoryFlow] Creating video for:', payload.asin)
+        const videoBuffer = await createSlideshow(payload.images, payload.asin)
+        const videoId = await client.uploadVideo(videoBuffer, (payload.title || payload.asin).slice(0, 80))
+        if (videoId && !videoId.startsWith('SIM-')) {
+          console.log('[InventoryFlow] Video uploaded successfully, videoId:', videoId)
+        }
+      }
+    } catch (videoErr) {
+      console.warn('[InventoryFlow] Video upload failed (non-critical):', videoErr)
+    }
 
     if (!publishResp.listingId) {
       throw new Error("publishOffer did not return a listingId")

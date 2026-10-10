@@ -3,6 +3,8 @@
 // store_settings tablosu (policies, merchant_location_key, adres, fiyatlandirma).
 // ----------------------------------------------------------------
 
+import type { PricingMode, TieredProfitOverrides } from "../pricing/pricingTypes"
+
 export type StoreAddress = {
   firstName:  string
   lastName:   string
@@ -20,6 +22,9 @@ export type StoreSettingsRow = {
   workspaceId:           string
   storeId:               number
   markupPercent:         number
+  pricingMode:           PricingMode
+  percentageNetProfitPercent: number
+  tieredProfitOverrides: TieredProfitOverrides
   profitMarginPercent:   number
   taxEstimatePercent:    number
   ebayFeePercent:        number
@@ -44,12 +49,16 @@ export type StoreSettingsRow = {
   addressCountry:        string | null
   /** Registration / overseas policy market (US, UK, DE, …) */
   registrationCountry:   string | null
+  warehouseShippingBannerEnabled: boolean
 }
 
 export type CreateStoreSettingsInput = {
   workspaceId:           string
   storeId:               number
   markupPercent?:        number
+  pricingMode?:          PricingMode
+  percentageNetProfitPercent?: number
+  tieredProfitOverrides?: TieredProfitOverrides
   profitMarginPercent?:  number
   taxEstimatePercent?:   number
   ebayFeePercent?:       number
@@ -71,6 +80,7 @@ export type CreateStoreSettingsInput = {
   addressZip?:           string | null
   addressCountry?:       string | null
   registrationCountry?:  string | null
+  warehouseShippingBannerEnabled?: boolean
 }
 
 export type UpdateStoreSettingsInput = Partial<Omit<

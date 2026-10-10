@@ -1,0 +1,354 @@
+/* SOURCE ONLY — bundled into homepage-entry.css. Clear process storytelling. */
+
+/* —— Hero explainer —— */
+.ops-hero-inner--story {
+  max-width: var(--ops-max);
+}
+
+.ops-hero-explainer {
+  margin-top: 20px;
+  font-size: clamp(1.0625rem, 2.2vw, 1.2rem);
+  line-height: 1.55;
+  color: var(--ops-text-primary);
+  max-width: 48ch;
+  font-weight: 400;
+}
+
+.ops-hero-inner--story .ops-hero-lead {
+  margin-top: 12px;
+  font-size: 1rem;
+  color: var(--ops-text-secondary);
+}
+
+.ops-hero-inner--story h1 {
+  max-width: 18ch;
+}
+
+.ops-hero-inner--story .ops-hero-ctas {
+  margin-top: 28px;
+}
+
+/* —— Hero process story —— */
+.ops-hero-flow {
+  margin-top: 32px;
+  padding: 24px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--ops-border);
+  background: rgba(26, 26, 31, 0.75);
+  max-width: 100%;
+}
+
+.ops-hero-flow-tier-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ops-text-tertiary);
+  margin-bottom: 10px;
+}
+
+.ops-hero-flow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ops-hero-flow-chip {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--ops-border-strong);
+  background: var(--ops-panel);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ops-text-primary);
+}
+
+.ops-hero-flow-connector {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.ops-hero-flow-arrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  color: var(--ops-text-tertiary);
+  opacity: 0.7;
+}
+
+.ops-hero-flow-layer-name {
+  text-align: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--ops-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.ops-hero-flow-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 4px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.ops-hero-flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 72px;
+  max-width: 100px;
+  padding: 10px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-panel-inset);
+}
+
+.ops-hero-flow-step-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ops-text-primary);
+}
+
+.ops-hero-flow-step-desc {
+  margin-top: 4px;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--ops-text-tertiary);
+}
+
+.ops-hero-flow-step-arrow {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .ops-hero-flow-steps {
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+
+  .ops-hero-flow-step {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: none;
+    min-width: 0;
+    flex: 0 1 auto;
+    padding: 10px 12px;
+    text-align: left;
+    align-items: center;
+  }
+
+  .ops-hero-flow-step-arrow {
+    display: inline;
+    margin: 0 10px;
+    color: var(--ops-text-tertiary);
+    font-size: 0.75rem;
+    align-self: center;
+  }
+}
+
+/* Directional pulse along execution steps */
+.ops-hero-flow--motion .ops-hero-flow-step {
+  animation: ops-hero-step-pulse 16s ease-in-out infinite;
+  animation-delay: calc(var(--ops-step-i, 0) * 3.5s);
+}
+
+@keyframes ops-hero-step-pulse {
+  0%,
+  18%,
+  100% {
+    border-color: var(--ops-border);
+    background: var(--ops-panel-inset);
+  }
+  6%,
+  12% {
+    border-color: var(--ops-border-strong);
+    background: rgba(232, 228, 220, 0.06);
+  }
+}
+
+/* —— Marketplace process panel —— */
+.ops-mode-caption {
+  margin-bottom: 16px;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ops-text-secondary);
+  max-width: 62ch;
+}
+
+.ops-mode-panel {
+  position: relative;
+}
+
+.ops-mode-panel-layer {
+  display: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 700ms var(--ops-ease),
+    transform 700ms var(--ops-ease);
+}
+
+.ops-mode-panel-layer--active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ops-mode-viz-wrap {
+  padding: 20px 16px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-panel);
+}
+
+/* —— Process pipeline —— */
+.ops-process-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin-bottom: 20px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ops-process-pipeline-item {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ops-process-pipeline-node {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-panel-inset);
+  min-width: 0;
+}
+
+.ops-process-pipeline-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ops-text-secondary);
+  white-space: nowrap;
+}
+
+.ops-process-pipeline-arrow {
+  margin: 0 6px;
+  font-size: 0.75rem;
+  color: var(--ops-text-tertiary);
+  flex-shrink: 0;
+}
+
+.ops-process-pipeline--motion .ops-process-pipeline-node {
+  animation: ops-pipe-step-pulse 18s ease-in-out infinite;
+  animation-delay: calc(var(--ops-pipe-i, 0) * 2.8s);
+}
+
+@keyframes ops-pipe-step-pulse {
+  0%,
+  14%,
+  100% {
+    border-color: var(--ops-border);
+    background: var(--ops-panel-inset);
+  }
+  5%,
+  10% {
+    border-color: var(--ops-accent);
+    background: rgba(226, 219, 210, 0.08);
+  }
+
+  .ops-process-pipeline-label {
+    color: var(--ops-text-primary);
+  }
+}
+
+/* —— Step cards —— */
+.ops-process-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 480px) {
+  .ops-process-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .ops-process-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.ops-process-card {
+  padding: 14px 14px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-panel-inset);
+  min-width: 0;
+}
+
+.ops-process-card-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ops-text-primary);
+  margin: 0;
+}
+
+.ops-process-card-desc {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ops-text-secondary);
+}
+
+.ops-process-card-status {
+  margin-top: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-text-tertiary);
+}
+
+@media (max-width: 767px) {
+  .ops-hero-flow {
+    padding: 18px 14px;
+  }
+
+  .ops-process-pipeline {
+    flex-wrap: nowrap;
+    padding-bottom: 8px;
+  }
+
+  .ops-process-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-hero-flow--motion .ops-hero-flow-step,
+  .ops-process-pipeline--motion .ops-process-pipeline-node {
+    animation: none;
+  }
+
+  .ops-hero-flow-step:first-child,
+  .ops-process-pipeline-node:first-child {
+    border-color: var(--ops-border-strong);
+    background: rgba(232, 228, 220, 0.06);
+  }
+}

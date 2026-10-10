@@ -1,0 +1,30 @@
+/**
+ * SOURCE ONLY — bundled into homepage-entry.css via npm run bundle:homepage-css
+ * Do not import this file anywhere. Dashboard :root is unchanged.
+ */
+.ops-home {
+  --ops-void: #0c0c0e;
+  --ops-plane: #131316;
+  --ops-panel: #1a1a1f;
+  --ops-panel-inset: #141418;
+  --ops-border: #2a2a30;
+  --ops-border-strong: #3a3a42;
+  --ops-text-primary: #ededf0;
+  --ops-text-secondary: #9a9aa8;
+  --ops-text-tertiary: #5c5c6a;
+  --ops-accent: #e2dbd2;
+  --ops-accent-ink: #121218;
+  --ops-accent-hover: #ebe4dc;
+  --ops-route: #6b6b78;
+  --ops-highlight: #e8e4dc;
+  --ops-max: 1200px;
+  --ops-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ops-reveal-duration: 520ms;
+  --ops-nav-height: 56px;
+}
+
+@media (min-width: 768px) {
+  .ops-home {
+    --ops-nav-height: 64px;
+  }
+}

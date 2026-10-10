@@ -42,6 +42,14 @@ export type EbayAccountStatus = {
   expiresIn:   number | null   // seconds
   expired:     boolean
   scope:       string | null
+  hasAnalyticsScope: boolean
+  hasMarketingScope: boolean
+}
+
+export type EbayOAuthReconnectResponse = {
+  ok: true
+  storeCode: string
+  authUrl: string
 }
 
 export type EbayTokenRefreshResult = {

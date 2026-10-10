@@ -1,0 +1,706 @@
+/* Full-bleed auth — premium dark navy + polish */
+
+.lj-auth {
+  --lj-navy: #070a12;
+  --lj-card: rgba(14, 20, 34, 0.72);
+  --lj-card-border: rgba(255, 255, 255, 0.1);
+  --lj-text: #f4f7fb;
+  --lj-muted: #9aa6b8;
+  --lj-blue: #2d7ff9;
+  --lj-green: #34d399;
+  --lj-grad: linear-gradient(90deg, #2d7ff9 0%, #34d399 100%);
+  --lj-input: #0a101c;
+  --lj-input-border: rgba(255, 255, 255, 0.12);
+  --lj-space-1: 6px;
+  --lj-space-2: 10px;
+  --lj-space-3: 14px;
+  --lj-space-4: 18px;
+  --lj-space-5: 22px;
+  --lj-control-h: 48px;
+  --lj-radius: 12px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 30%, rgba(45, 127, 249, 0.18), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 70% 80%, rgba(52, 211, 153, 0.12), transparent 50%),
+    linear-gradient(160deg, #05070e 0%, #0a1220 45%, #070b14 100%);
+  color: var(--lj-text);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lj-auth * { box-sizing: border-box; }
+
+.lj-auth__lang {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.lj-auth__lang button {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--lj-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lj-auth__lang button.is-active {
+  color: #fff;
+  border-color: rgba(45, 127, 249, 0.55);
+  background: rgba(45, 127, 249, 0.2);
+}
+
+/* —— Left marketing —— */
+.lj-auth__visual {
+  position: relative;
+  padding: 40px 48px 36px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.lj-auth__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  width: fit-content;
+}
+
+.lj-auth__mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--lj-grad);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 24px rgba(45, 127, 249, 0.35);
+  flex-shrink: 0;
+}
+
+.lj-auth__mark svg { width: 22px; height: 22px; }
+
+.lj-auth__brand-text strong {
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.lj-auth__brand-text span {
+  display: block;
+  font-size: 12px;
+  color: var(--lj-muted);
+  margin-top: 2px;
+}
+
+.lj-auth__hero {
+  margin-top: 48px;
+  max-width: 520px;
+  position: relative;
+  z-index: 2;
+}
+
+.lj-auth__hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(1.85rem, 3.2vw, 2.55rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: #fff;
+  margin: 0 0 18px;
+}
+
+.lj-auth__hero h1 em {
+  font-style: normal;
+  background: var(--lj-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lj-auth__features {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.lj-auth__features li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #d7dee9;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.lj-auth__feat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  place-items: center;
+  color: var(--lj-green);
+  flex-shrink: 0;
+}
+
+.lj-auth__feat-icon svg { width: 16px; height: 16px; }
+
+.lj-auth__map {
+  position: absolute;
+  inset: 8% 0 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+.lj-auth__map svg {
+  width: 115%;
+  height: 100%;
+  transform: translateX(-4%);
+}
+
+.lj-auth__float {
+  position: absolute;
+  z-index: 2;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(12, 18, 32, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #e8eef8;
+  animation: lj-auth-float 6s ease-in-out infinite;
+}
+
+.lj-auth__float--a { left: 8%; bottom: 28%; animation-delay: 0s; }
+.lj-auth__float--b { left: 38%; bottom: 42%; animation-delay: 1.2s; }
+.lj-auth__float--c { left: 22%; bottom: 14%; animation-delay: 0.6s; }
+.lj-auth__float--d { right: 12%; bottom: 34%; animation-delay: 1.8s; }
+
+.lj-auth__float strong { display: block; font-size: 12px; font-weight: 650; margin-bottom: 2px; }
+.lj-auth__float span { color: var(--lj-muted); font-size: 11px; }
+.lj-auth__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lj-auth__pill--ok { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; }
+.lj-auth__pill--info { background: rgba(45, 127, 249, 0.18); color: #93c5fd; }
+
+@keyframes lj-auth-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.lj-auth__foot-note {
+  margin-top: auto;
+  padding-top: 28px;
+  position: relative;
+  z-index: 2;
+  font-size: 12px;
+  color: var(--lj-muted);
+  max-width: 420px;
+}
+
+/* —— Right panel —— */
+.lj-auth__panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 28px 28px 12px;
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+
+.lj-auth__card {
+  width: 420px;
+  max-width: 100%;
+  height: 660px;
+  display: flex;
+  flex-direction: column;
+  background: var(--lj-card);
+  border: 1px solid var(--lj-card-border);
+  border-radius: 24px;
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 28px 28px 22px;
+  /* Prevent any child animation from shifting the outer shell */
+  transform: none !important;
+  overflow: hidden;
+}
+
+.lj-auth__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: var(--lj-space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.lj-auth__tab {
+  background: none;
+  border: none;
+  color: var(--lj-muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 8px 14px;
+  cursor: pointer;
+  position: relative;
+}
+
+.lj-auth__tab.is-active {
+  color: #fff;
+}
+
+.lj-auth__tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--lj-blue);
+  box-shadow: 0 0 12px rgba(45, 127, 249, 0.6);
+}
+
+.lj-auth__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Fixed-height form slot — only inner opacity changes on tab switch */
+.lj-auth__content-slot {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.lj-auth__swap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.lj-auth__swap.is-leaving,
+.lj-auth__swap.is-entering {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lj-auth__greeting {
+  margin-bottom: var(--lj-space-3);
+  flex-shrink: 0;
+  min-height: 52px;
+}
+
+.lj-auth__greeting h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 var(--lj-space-1);
+  color: #fff;
+}
+
+.lj-auth__greeting p {
+  margin: 0;
+  color: var(--lj-muted);
+  font-size: 13px;
+}
+
+.lj-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  flex: 1;
+  min-height: 0;
+}
+
+.lj-auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-1);
+  width: 100%;
+}
+
+.lj-auth__field.is-reserved {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.lj-auth__field > span {
+  font-size: 12px;
+  color: var(--lj-muted);
+  font-weight: 500;
+  line-height: 1.2;
+  min-height: 15px;
+}
+
+.lj-auth__control {
+  display: flex;
+  align-items: center;
+  gap: var(--lj-space-2);
+  width: 100%;
+  background: var(--lj-input);
+  border: 1px solid var(--lj-input-border);
+  border-radius: var(--lj-radius);
+  padding: 0 12px;
+  height: var(--lj-control-h);
+  min-height: var(--lj-control-h);
+  max-height: var(--lj-control-h);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+}
+
+.lj-auth__control:focus-within {
+  border-color: rgba(45, 127, 249, 0.65);
+  box-shadow: 0 0 0 3px rgba(45, 127, 249, 0.18);
+}
+
+.lj-auth__control > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--lj-muted);
+  flex-shrink: 0;
+}
+
+.lj-auth__control input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 0;
+  box-shadow: none !important;
+}
+
+.lj-auth__control input::placeholder {
+  color: rgba(154, 166, 184, 0.65);
+  -webkit-text-fill-color: rgba(154, 166, 184, 0.65);
+}
+
+/* Chrome / Safari autofill — keep dark theme */
+.lj-auth__control input:-webkit-autofill,
+.lj-auth__control input:-webkit-autofill:hover,
+.lj-auth__control input:-webkit-autofill:focus,
+.lj-auth__control input:-webkit-autofill:active {
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff !important;
+  border: none !important;
+  transition: background-color 99999s ease-out 0s;
+  box-shadow: 0 0 0 1000px var(--lj-input) inset !important;
+  background-color: var(--lj-input) !important;
+  background-image: none !important;
+  color: #fff !important;
+}
+
+.lj-auth__control:has(input:-webkit-autofill) {
+  background: var(--lj-input);
+  border-color: var(--lj-input-border);
+}
+
+.lj-auth__eye {
+  background: none;
+  border: none;
+  color: var(--lj-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.lj-auth__eye:hover { color: #fff; }
+
+.lj-auth__row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 18px;
+  margin-top: -2px;
+}
+
+.lj-auth__row.is-reserved {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.lj-auth__link {
+  background: none;
+  border: none;
+  color: var(--lj-blue);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lj-auth__error,
+.lj-auth__ok {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  min-height: 18px;
+}
+
+.lj-auth__error { color: #f87171; }
+.lj-auth__ok { color: #6ee7b7; }
+
+.lj-auth__submit {
+  width: 100%;
+  height: var(--lj-control-h);
+  min-height: var(--lj-control-h);
+  border: none;
+  border-radius: var(--lj-radius);
+  background: var(--lj-grad);
+  color: #041018;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 10px 28px rgba(45, 127, 249, 0.28);
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.lj-auth__submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.lj-auth__social {
+  flex-shrink: 0;
+  margin-top: var(--lj-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lj-space-3);
+  width: 100%;
+}
+
+.lj-auth__divider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  color: var(--lj-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0;
+}
+
+.lj-auth__divider::before,
+.lj-auth__divider::after {
+  content: '';
+  flex: 1 1 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  min-width: 24px;
+}
+
+.lj-auth__divider > span {
+  flex: 0 0 auto;
+  padding: 0 2px;
+}
+
+.lj-auth__google-wrap {
+  width: 100%;
+  min-height: var(--lj-control-h);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lj-space-3);
+}
+
+.lj-auth__google-host {
+  width: 100%;
+  min-height: var(--lj-control-h);
+  display: block;
+  /* Do NOT use overflow:hidden — it clipped the GIS iframe */
+  border-radius: var(--lj-radius);
+  /* Subtle edge so filled_black stays readable on dark glass */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: #000;
+}
+
+.lj-auth__google-host > div {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+}
+
+.lj-auth__google-host iframe {
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  display: block !important;
+}
+
+.lj-auth__google-error {
+  color: #f87171;
+  font-size: 13px;
+  margin: 6px 0 0;
+  text-align: center;
+}
+
+.lj-auth__trust {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: var(--lj-space-3);
+  padding-top: var(--lj-space-3);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.lj-auth__trust span {
+  font-size: 11px;
+  color: var(--lj-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lj-auth__success-box {
+  text-align: center;
+  padding: 12px 4px 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.lj-auth__success-box h3 {
+  font-family: 'Syne', sans-serif;
+  margin: 0 0 8px;
+  color: #fff;
+}
+
+.lj-auth__success-box p {
+  color: var(--lj-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+@media (max-width: 960px) {
+  .lj-auth {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .lj-auth__visual {
+    padding: 28px 22px 12px;
+    min-height: auto;
+  }
+
+  .lj-auth__hero {
+    margin-top: 28px;
+  }
+
+  .lj-auth__hero h1 {
+    font-size: 1.65rem;
+  }
+
+  .lj-auth__map,
+  .lj-auth__float {
+    display: none;
+  }
+
+  .lj-auth__features {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .lj-auth__features li:nth-child(n + 5) {
+    display: none;
+  }
+
+  .lj-auth__foot-note {
+    display: none;
+  }
+
+  .lj-auth__panel {
+    padding: 8px 16px 28px;
+    align-items: flex-start;
+  }
+
+  .lj-auth__card {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 560px;
+    border-radius: 20px;
+    padding: 22px 18px 18px;
+  }
+
+  .lj-auth__lang {
+    top: 14px;
+    right: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .lj-auth__features {
+    grid-template-columns: 1fr;
+  }
+
+  .lj-auth__card {
+    height: auto;
+    min-height: 540px;
+    padding: 20px 16px 16px;
+  }
+}
